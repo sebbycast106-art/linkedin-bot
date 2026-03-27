@@ -109,7 +109,14 @@ class LinkedInSession:
             page.wait_for_load_state("networkidle", timeout=15000)
             random_delay(2, 4)
             if "checkpoint" in page.url or "challenge" in page.url:
-                print("[session] ⚠️  LinkedIn security challenge — manual intervention needed", flush=True)
+                msg = f"⚠️ LinkedIn security challenge detected!\nURL: {page.url}\n\nManual action needed: check your email for a verification code, then re-trigger login."
+                print(f"[session] {msg}", flush=True)
+                try:
+                    import telegram_service
+                    telegram_service.send_telegram(msg)
+                except Exception:
+                    pass
+                raise RuntimeError(f"LinkedIn security challenge: {page.url}")
             else:
                 print(f"[session] login result: {page.url}", flush=True)
         except Exception as e:

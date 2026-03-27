@@ -20,6 +20,11 @@ def _run_job_scraper():
         print(f"[job_scraper] sent {len(jobs)} jobs", flush=True)
     except Exception as e:
         print(f"[job_scraper] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ LinkedIn job scraper failed: {e}")
+        except Exception:
+            pass
 
 
 def _run_engagement():
@@ -32,6 +37,11 @@ def _run_engagement():
         send_telegram(f"✅ LinkedIn engagement: {result['liked']} likes, {result['commented']} comments")
     except Exception as e:
         print(f"[engagement] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ LinkedIn engagement failed: {e}")
+        except Exception:
+            pass
 
 
 def _run_connector():
@@ -44,11 +54,39 @@ def _run_connector():
         send_telegram(f"🤝 LinkedIn connector: {count} connection requests sent")
     except Exception as e:
         print(f"[connector] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ LinkedIn connector failed: {e}")
+        except Exception:
+            pass
 
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/internal/login-test", methods=["POST"])
+def login_test():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+
+    def _test():
+        from linkedin_session import LinkedInSession
+        from telegram_service import send_telegram
+        try:
+            with LinkedInSession() as session:
+                page = session.new_page()
+                page.goto("https://www.linkedin.com/feed/", timeout=20000)
+                url = page.url
+                page.close()
+            send_telegram(f"✅ LinkedIn login OK — landed on: {url}")
+        except Exception as e:
+            send_telegram(f"❌ LinkedIn login test failed: {e}")
+
+    threading.Thread(target=_test, daemon=True).start()
+    return jsonify({"status": "ok", "message": "login test started"})
 
 
 @app.route("/internal/run-job-scraper", methods=["POST"])
