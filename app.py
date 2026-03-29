@@ -10,6 +10,7 @@ app = Flask(__name__)
 def _run_job_scraper():
     from linkedin_session import LinkedInSession
     from job_scraper import scrape_new_jobs, format_job_message
+    from job_scorer import filter_and_score_jobs
     from telegram_service import send_telegram
     try:
         with LinkedInSession() as session:
@@ -17,8 +18,10 @@ def _run_job_scraper():
         if not jobs:
             print("[job_scraper] no new jobs", flush=True)
             return
-        header = f"💼 {len(jobs)} new co-op/internship listings:\n\n"
-        send_telegram(header + "\n\n".join(format_job_message(j) for j in jobs[:10]))
+        scored_jobs = filter_and_score_jobs(jobs, min_score=6)
+        display_jobs = scored_jobs if scored_jobs else jobs[:10]
+        header = f"💼 {len(scored_jobs)}/{len(jobs)} relevant co-op/internship listings:\n\n"
+        send_telegram(header + "\n\n".join(format_job_message(j) for j in display_jobs[:10]))
         for job in jobs:
             try:
                 add_application(job["job_id"], job["company"], job["title"], job.get("url", ""), status="seen")
@@ -291,6 +294,87 @@ def run_recruiter_followup():
         return "Forbidden", 403
     threading.Thread(target=_run_recruiter_followup, daemon=True).start()
     return jsonify({"status": "ok", "message": "recruiter follow-up started"})
+
+
+def _run_easy_apply():
+    from linkedin_session import LinkedInSession
+    from easy_apply_service import run_easy_apply_batch
+    from application_tracker import get_applications
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            jobs = get_applications(status_filter="seen")
+            result = run_easy_apply_batch(session, jobs)
+        send_telegram(f"📝 Easy Apply: {result['applied']} submitted, {result['skipped']} skipped")
+    except Exception as e:
+        print(f"[easy_apply] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Easy Apply failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_profile_views():
+    from linkedin_session import LinkedInSession
+    from profile_views_service import run_profile_views_connect
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            result = run_profile_views_connect(session)
+        send_telegram(f"👀 Profile views: {result['sent']} connections sent ({result['checked']} checked)")
+    except Exception as e:
+        print(f"[profile_views] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Profile views connect failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_inbox_check():
+    from linkedin_session import LinkedInSession
+    from inbox_monitor_service import run_inbox_check
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            result = run_inbox_check(session)
+        if result['notified'] == 0:
+            print(f"[inbox] checked {result['found']} threads, no recruiter messages", flush=True)
+    except Exception as e:
+        print(f"[inbox] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Inbox check failed: {e}")
+        except Exception:
+            pass
+
+
+@app.route("/internal/run-easy-apply", methods=["POST"])
+def run_easy_apply():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_easy_apply, daemon=True).start()
+    return jsonify({"status": "ok", "message": "easy apply started"})
+
+
+@app.route("/internal/run-profile-views", methods=["POST"])
+def run_profile_views():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_profile_views, daemon=True).start()
+    return jsonify({"status": "ok", "message": "profile views connect started"})
+
+
+@app.route("/internal/run-inbox-check", methods=["POST"])
+def run_inbox_check_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_inbox_check, daemon=True).start()
+    return jsonify({"status": "ok", "message": "inbox check started"})
 
 
 if __name__ == "__main__":

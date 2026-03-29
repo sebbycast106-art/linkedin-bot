@@ -35,8 +35,9 @@ def build_search_url(keywords: str, location: str) -> str:
 
 
 def format_job_message(job: dict) -> str:
+    score_str = f" ⭐{job['score']}/10" if job.get("score") else ""
     return (
-        f"💼 {job['title']}\n"
+        f"💼 {job['title']}{score_str}\n"
         f"🏢 {job['company']}\n"
         f"📍 {job['location']}\n"
         f"🔗 {job['url']}"
