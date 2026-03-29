@@ -203,3 +203,30 @@ def test_run_easy_apply_batch_tracks_applied_job(tmp_path, monkeypatch):
     assert "j99" in state["applied_ids"]
 
     assert result["applied"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Test 7: Low description score skips apply
+# ---------------------------------------------------------------------------
+
+def test_low_description_score_skips_apply():
+    """When description score is below 7, try_easy_apply returns False without clicking Easy Apply."""
+    page = MagicMock()
+
+    easy_apply_btn = MagicMock()
+
+    def _query_selector(selector):
+        if "Easy Apply" in selector:
+            return easy_apply_btn
+        return None
+
+    page.query_selector.side_effect = _query_selector
+    page.query_selector_all.return_value = []
+
+    with patch("easy_apply_service.random_delay"), \
+         patch("easy_apply_service.job_scorer.scrape_job_description", return_value="some description"), \
+         patch("easy_apply_service.job_scorer.score_job_description", return_value=4):
+        result = easy_apply_service.try_easy_apply(page, "https://www.linkedin.com/jobs/view/999/")
+
+    assert result is False
+    easy_apply_btn.click.assert_not_called()

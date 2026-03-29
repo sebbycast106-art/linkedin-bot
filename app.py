@@ -377,5 +377,64 @@ def run_inbox_check_endpoint():
     return jsonify({"status": "ok", "message": "inbox check started"})
 
 
+def _run_watchlist_check():
+    from linkedin_session import LinkedInSession
+    from company_watchlist_service import run_watchlist_check
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            result = run_watchlist_check(session)
+        print(f"[watchlist] {result['alerts_sent']} alerts, {result['companies_checked']} companies checked", flush=True)
+    except Exception as e:
+        print(f"[watchlist] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Watchlist check failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_weekly_digest():
+    from weekly_digest_service import run_weekly_digest
+    from telegram_service import send_telegram
+    try:
+        run_weekly_digest()
+        print("[weekly_digest] sent", flush=True)
+    except Exception as e:
+        print(f"[weekly_digest] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Weekly digest failed: {e}")
+        except Exception:
+            pass
+
+
+@app.route("/internal/status", methods=["GET"])
+def status():
+    from health_service import get_status
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    return jsonify(get_status())
+
+
+@app.route("/internal/run-watchlist", methods=["POST"])
+def run_watchlist():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_watchlist_check, daemon=True).start()
+    return jsonify({"status": "ok", "message": "watchlist check started"})
+
+
+@app.route("/internal/run-weekly-digest", methods=["POST"])
+def run_weekly_digest_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_weekly_digest, daemon=True).start()
+    return jsonify({"status": "ok", "message": "weekly digest started"})
+
+
 if __name__ == "__main__":
     app.run(debug=True)

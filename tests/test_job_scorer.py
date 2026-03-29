@@ -111,3 +111,47 @@ def test_format_job_message_without_score():
     }
     msg = job_scraper.format_job_message(job)
     assert "⭐" not in msg
+
+
+# ---------------------------------------------------------------------------
+# score_job_description tests
+# ---------------------------------------------------------------------------
+
+def test_score_job_description_returns_integer():
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _make_response("9")
+    with patch("job_scorer.anthropic.Anthropic", return_value=mock_client):
+        result = job_scorer.score_job_description("Finance Intern", "BlackRock", "Great finance role with growth opportunities.")
+    assert result == 9
+
+
+def test_score_job_description_returns_5_on_error():
+    with patch("job_scorer.anthropic.Anthropic", side_effect=Exception("API down")):
+        result = job_scorer.score_job_description("Finance Intern", "BlackRock", "Some description")
+    assert result == 5
+
+
+# ---------------------------------------------------------------------------
+# scrape_job_description tests
+# ---------------------------------------------------------------------------
+
+def test_scrape_job_description_returns_text():
+    page = MagicMock()
+    el = MagicMock()
+    el.inner_text.return_value = "Great finance role"
+
+    def _query_selector(selector):
+        if selector == ".jobs-description__content":
+            return el
+        return None
+
+    page.query_selector.side_effect = _query_selector
+    result = job_scorer.scrape_job_description(page, "https://www.linkedin.com/jobs/view/123/")
+    assert result == "Great finance role"
+
+
+def test_scrape_job_description_returns_empty_on_error():
+    page = MagicMock()
+    page.goto.side_effect = Exception("navigation failed")
+    result = job_scorer.scrape_job_description(page, "https://www.linkedin.com/jobs/view/123/")
+    assert result == ""

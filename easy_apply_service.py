@@ -9,6 +9,7 @@ Public interface:
     run_easy_apply_batch(session, jobs: list) -> dict  # {"applied": N, "skipped": N, "errors": N}
 """
 import database
+import job_scorer
 from linkedin_session import random_delay
 from application_tracker import add_application
 
@@ -27,6 +28,24 @@ def try_easy_apply(page, job_url: str) -> bool:
     try:
         page.goto(job_url, timeout=20000)
         random_delay(2, 3)
+
+        # Score full job description before attempting apply
+        title_from_page = ""
+        company_from_page = ""
+        try:
+            t = page.query_selector("h1.job-details-jobs-unified-top-card__job-title, h1.jobs-unified-top-card__job-title")
+            title_from_page = t.inner_text().strip() if t else ""
+            c = page.query_selector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name")
+            company_from_page = c.inner_text().strip() if c else ""
+        except Exception:
+            pass
+
+        description = job_scorer.scrape_job_description(page, job_url)
+        if description:
+            desc_score = job_scorer.score_job_description(title_from_page, company_from_page, description)
+            if desc_score < 7:
+                print(f"[easy_apply] {job_url[:60]}: description score {desc_score}/10 — skipping", flush=True)
+                return False
 
         # Look for Easy Apply button
         easy_apply_btn = page.query_selector("button[aria-label*='Easy Apply']")
