@@ -43,3 +43,42 @@ def test_format_summary_empty():
     from application_tracker import format_applications_summary
     summary = format_applications_summary()
     assert "No applications" in summary
+
+
+def test_add_application_with_seen_status():
+    from application_tracker import add_application, get_applications
+    add_application("j10", "Fidelity", "Intern", status="seen")
+    apps = get_applications()
+    assert apps[0]["status"] == "seen"
+
+
+def test_update_status_to_seen():
+    from application_tracker import add_application, update_status, get_applications
+    add_application("j11", "Vanguard", "Tech Intern")
+    msg = update_status("j11", "seen")
+    assert "seen" in msg
+    apps = get_applications()
+    assert apps[0]["status"] == "seen"
+
+
+def test_format_summary_shows_seen_section():
+    from application_tracker import add_application, format_applications_summary
+    add_application("j12", "Fidelity", "Data Intern", status="seen")
+    summary = format_applications_summary()
+    assert "SEEN" in summary
+
+
+def test_follow_ups_skips_seen_status():
+    from application_tracker import add_application, check_follow_ups
+    import application_tracker
+    from datetime import datetime, timezone, timedelta
+    add_application("j13", "T. Rowe Price", "Software Intern", status="seen")
+    # Manually set applied_at to 10 days ago to simulate old entry
+    import database
+    state = database.load_state(application_tracker._STATE_FILE, default={"applications": []})
+    for app in state["applications"]:
+        if app["job_id"] == "j13":
+            app["applied_at"] = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    database.save_state(application_tracker._STATE_FILE, state)
+    reminders = check_follow_ups()
+    assert reminders == []

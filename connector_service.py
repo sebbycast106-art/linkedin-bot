@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from linkedin_session import LinkedInSession, random_delay
 import ai_service
 import database
+import profile_scraper
 
 _STATE_FILE = "connector_state.json"
 _DAILY_CONNECT_LIMIT = 20
@@ -56,6 +57,7 @@ def run_daily_connections(session: LinkedInSession) -> int:
     total_sent = 0
 
     page = session.new_page()
+    profile_page = session.new_page()
     try:
         for query in _SEARCH_QUERIES:
             if _get_daily_count(state) >= _DAILY_CONNECT_LIMIT:
@@ -87,6 +89,13 @@ def run_daily_connections(session: LinkedInSession) -> int:
                         if not profile_id or profile_id in connected_ids:
                             continue
 
+                        if profile_id:
+                            enrichment = profile_scraper.scrape_profile(profile_page, f"https://www.linkedin.com/in/{profile_id}/")
+                        else:
+                            enrichment = {}
+                        school = enrichment.get("school", "")
+                        headline = enrichment.get("headline", "")
+
                         connect_btn = result.query_selector("button[aria-label*='Connect'], button[aria-label*='Invite']")
                         if not connect_btn:
                             continue
@@ -98,7 +107,7 @@ def run_daily_connections(session: LinkedInSession) -> int:
                         if add_note_btn:
                             company = title.split(" at ")[-1] if " at " in title else ""
                             role = title.split(" at ")[0] if " at " in title else title
-                            note = ai_service.generate_connection_message(name, role, company)
+                            note = ai_service.generate_connection_message(name, role, company, school=school, headline=headline)
                             if note:
                                 add_note_btn.click()
                                 random_delay(0.5, 1)
@@ -130,6 +139,7 @@ def run_daily_connections(session: LinkedInSession) -> int:
                 print(f"[connector] search error: {e}", flush=True)
     finally:
         page.close()
+        profile_page.close()
         database.save_state(_STATE_FILE, state)
 
     print(f"[connector] sent {total_sent} requests", flush=True)

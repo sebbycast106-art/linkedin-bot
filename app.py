@@ -19,6 +19,11 @@ def _run_job_scraper():
             return
         header = f"💼 {len(jobs)} new co-op/internship listings:\n\n"
         send_telegram(header + "\n\n".join(format_job_message(j) for j in jobs[:10]))
+        for job in jobs:
+            try:
+                add_application(job["job_id"], job["company"], job["title"], job.get("url", ""), status="seen")
+            except Exception:
+                pass
         print(f"[job_scraper] sent {len(jobs)} jobs", flush=True)
     except Exception as e:
         print(f"[job_scraper] error: {e}", flush=True)
@@ -59,6 +64,40 @@ def _run_connector():
         try:
             from telegram_service import send_telegram
             send_telegram(f"❌ LinkedIn connector failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_recruiter_outreach():
+    from linkedin_session import LinkedInSession
+    from recruiter_service import run_recruiter_outreach
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            result = run_recruiter_outreach(session)
+        send_telegram(f"🤝 Recruiter outreach: {result['sent']} connection requests sent")
+    except Exception as e:
+        print(f"[recruiter] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Recruiter outreach failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_recruiter_followup():
+    from linkedin_session import LinkedInSession
+    from recruiter_service import run_followup_check
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            result = run_followup_check(session)
+        send_telegram(f"💬 Recruiter follow-ups: {result['messaged']} messages sent")
+    except Exception as e:
+        print(f"[recruiter_followup] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Recruiter follow-up failed: {e}")
         except Exception:
             pass
 
@@ -234,6 +273,24 @@ def check_follow_ups_endpoint():
         return "Forbidden", 403
     threading.Thread(target=_run_follow_up_check, daemon=True).start()
     return jsonify({"status": "ok", "message": "follow-up check started"})
+
+
+@app.route("/internal/run-recruiter", methods=["POST"])
+def run_recruiter():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_recruiter_outreach, daemon=True).start()
+    return jsonify({"status": "ok", "message": "recruiter outreach started"})
+
+
+@app.route("/internal/run-recruiter-followup", methods=["POST"])
+def run_recruiter_followup():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_recruiter_followup, daemon=True).start()
+    return jsonify({"status": "ok", "message": "recruiter follow-up started"})
 
 
 if __name__ == "__main__":

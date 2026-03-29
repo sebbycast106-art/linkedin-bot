@@ -79,3 +79,29 @@ def test_list_applications(client):
 def test_check_follow_ups_endpoint(client):
     resp = client.post("/internal/check-follow-ups?secret=test-secret")
     assert resp.json["status"] == "ok"
+
+
+def test_run_recruiter_rejects_bad_secret(client):
+    res = client.post("/internal/run-recruiter?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_run_recruiter_returns_ok(client):
+    with patch("app.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = MagicMock()
+        res = client.post("/internal/run-recruiter?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"
+
+
+def test_run_recruiter_followup_rejects_bad_secret(client):
+    res = client.post("/internal/run-recruiter-followup?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_run_recruiter_followup_returns_ok(client):
+    with patch("app.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = MagicMock()
+        res = client.post("/internal/run-recruiter-followup?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"

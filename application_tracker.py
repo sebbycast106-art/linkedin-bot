@@ -16,7 +16,7 @@ def _save(state: dict):
     database.save_state(_STATE_FILE, state)
 
 
-def add_application(job_id: str, company: str, title: str, url: str = "") -> str:
+def add_application(job_id: str, company: str, title: str, url: str = "", status: str = "applied") -> str:
     """Record a job application. Returns confirmation message."""
     state = _load()
     apps = state["applications"]
@@ -31,7 +31,7 @@ def add_application(job_id: str, company: str, title: str, url: str = "") -> str
         "title": title,
         "url": url,
         "applied_at": datetime.now(timezone.utc).isoformat(),
-        "status": "applied",  # applied | responded | interview | offer | rejected
+        "status": status,  # applied | responded | interview | offer | rejected | seen
         "follow_up_sent": False,
     })
     # Cap at 200
@@ -42,7 +42,7 @@ def add_application(job_id: str, company: str, title: str, url: str = "") -> str
 
 def update_status(job_id: str, status: str) -> str:
     """Update application status. Returns confirmation or error."""
-    valid = {"applied", "responded", "interview", "offer", "rejected"}
+    valid = {"applied", "responded", "interview", "offer", "rejected", "seen"}
     if status not in valid:
         return f"Invalid status. Use: {', '.join(sorted(valid))}"
 
@@ -98,7 +98,8 @@ def format_applications_summary() -> str:
     if not apps:
         return "No applications tracked yet."
 
-    active = [a for a in apps if a["status"] not in ("rejected",)]
+    active = [a for a in apps if a["status"] not in ("rejected", "seen")]
+    seen = [a for a in apps if a["status"] == "seen"]
     by_status = {}
     for a in active:
         by_status.setdefault(a["status"], []).append(a)
@@ -109,4 +110,8 @@ def format_applications_summary() -> str:
             lines.append(f"\n{status.upper()} ({len(by_status[status])}):")
             for a in by_status[status][:5]:
                 lines.append(f"  • {a['company']} — {a['title']}")
+    if seen:
+        lines.append(f"\nSEEN ({len(seen)}):")
+        for a in seen[:5]:
+            lines.append(f"  • {a['company']} — {a['title']}")
     return "\n".join(lines)
