@@ -481,5 +481,49 @@ def telegram_command():
     return jsonify({"status": "ok"})
 
 
+def _run_interview_prep_check():
+    from interview_prep_service import run_interview_prep_check
+    try:
+        result = run_interview_prep_check()
+        print(f"[interview_prep] {result['prepped']} prep packages sent", flush=True)
+    except Exception as e:
+        print(f"[interview_prep] error: {e}", flush=True)
+
+
+def _run_alumni_connections():
+    from linkedin_session import LinkedInSession
+    from alumni_connector_service import run_alumni_connections
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            result = run_alumni_connections(session)
+        send_telegram(f"🎓 Alumni connector: {result['sent']} connection requests sent ({result['checked']} checked)")
+    except Exception as e:
+        print(f"[alumni_connector] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Alumni connector failed: {e}")
+        except Exception:
+            pass
+
+
+@app.route("/internal/run-interview-prep", methods=["POST"])
+def run_interview_prep():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_interview_prep_check, daemon=True).start()
+    return jsonify({"status": "ok", "message": "interview prep check started"})
+
+
+@app.route("/internal/run-alumni-connector", methods=["POST"])
+def run_alumni_connector():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_alumni_connections, daemon=True).start()
+    return jsonify({"status": "ok", "message": "alumni connector started"})
+
+
 if __name__ == "__main__":
     app.run(debug=True)
