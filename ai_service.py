@@ -6,6 +6,7 @@ Public interface:
     generate_connection_message(name, title, company, *, school="", headline="") -> str | None
     generate_recruiter_followup_message(name, company) -> str | None
     generate_inbox_reply(sender_name, sender_title, message_text) -> str | None
+    generate_cover_letter(title, company, description) -> str | None
 """
 import anthropic
 import config
@@ -86,6 +87,28 @@ def generate_recruiter_followup_message(name: str, company: str) -> str | None:
         return msg[:299] if msg else None
     except Exception as e:
         print(f"[ai_service] generate_recruiter_followup_message error: {e}", flush=True)
+        return None
+
+
+def generate_cover_letter(title: str, company: str, description: str) -> str | None:
+    """Generate a short cover letter paragraph for a job application."""
+    try:
+        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY())
+        prompt = f"""Write a 3-sentence cover letter paragraph for a Northeastern University sophomore applying for this role. Be specific, professional, and mention relevant skills. Do NOT start with "Dear" or "To Whom".
+
+Title: {title}
+Company: {company}
+Description: {description[:800]}
+
+Reply with ONLY the cover letter paragraph. Nothing else."""
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"[ai_service] cover letter error: {e}", flush=True)
         return None
 
 

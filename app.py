@@ -436,5 +436,50 @@ def run_weekly_digest_endpoint():
     return jsonify({"status": "ok", "message": "weekly digest started"})
 
 
+def _run_acceptance_check():
+    from linkedin_session import LinkedInSession
+    from connection_tracker_service import run_acceptance_check
+    from telegram_service import send_telegram
+    try:
+        with LinkedInSession() as session:
+            result = run_acceptance_check(session)
+        print(f"[acceptance_check] {result['accepted']} accepted, {result['still_pending']} pending", flush=True)
+    except Exception as e:
+        print(f"[acceptance_check] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Acceptance check failed: {e}")
+        except Exception:
+            pass
+
+
+@app.route("/internal/run-acceptance-check", methods=["POST"])
+def run_acceptance_check_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_acceptance_check, daemon=True).start()
+    return jsonify({"status": "ok", "message": "acceptance check started"})
+
+
+@app.route("/internal/telegram-command", methods=["POST"])
+def telegram_command():
+    """Handle inbound Telegram message commands."""
+    from telegram_commands_service import handle_telegram_command
+    from telegram_service import send_telegram
+    data = request.get_json(force=True, silent=True) or {}
+    text = ""
+    try:
+        text = data["message"]["text"]
+    except (KeyError, TypeError):
+        pass
+    if not text:
+        return jsonify({"status": "ok"})
+    reply = handle_telegram_command(text)
+    if reply:
+        send_telegram(reply)
+    return jsonify({"status": "ok"})
+
+
 if __name__ == "__main__":
     app.run(debug=True)

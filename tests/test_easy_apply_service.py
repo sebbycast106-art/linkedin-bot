@@ -59,6 +59,59 @@ def test_try_easy_apply_complex_form_skipped():
 
 
 # ---------------------------------------------------------------------------
+# Test: Cover letter textarea is filled via AI instead of skipping
+# ---------------------------------------------------------------------------
+
+def test_try_easy_apply_fills_cover_letter():
+    """When a cover letter textarea is found, generate_cover_letter is called and filled."""
+    page = MagicMock()
+
+    easy_apply_btn = MagicMock()
+    submit_btn = MagicMock()
+    success_el = MagicMock()
+    phone_input = MagicMock()
+    phone_input.input_value.return_value = ""
+
+    cover_textarea = MagicMock()
+    cover_textarea.get_attribute.return_value = "Cover letter"
+
+    def _query_selector(selector):
+        if "Easy Apply" in selector:
+            return easy_apply_btn
+        if "Submit application" in selector:
+            return submit_btn
+        if ".artdeco-inline-feedback--success" in selector:
+            return success_el
+        if "phoneNumber" in selector or "type='tel'" in selector or 'type="tel"' in selector:
+            return phone_input
+        if "Review" in selector:
+            return None
+        if "file" in selector:
+            return None
+        if "Dismiss" in selector:
+            return None
+        return None
+
+    def _query_selector_all(selector):
+        if "textarea" in selector:
+            return [cover_textarea]
+        # form sections — simple form (1 section)
+        return [MagicMock()]
+
+    page.query_selector.side_effect = _query_selector
+    page.query_selector_all.side_effect = _query_selector_all
+    page.url = "https://www.linkedin.com/jobs/view/111/"
+
+    with patch("easy_apply_service.random_delay"), \
+         patch("ai_service.generate_cover_letter", return_value="I am excited to apply.") as mock_gcl:
+        result = easy_apply_service.try_easy_apply(page, "https://www.linkedin.com/jobs/view/111/")
+
+    mock_gcl.assert_called_once()
+    cover_textarea.fill.assert_called_once_with("I am excited to apply.")
+    assert result is True
+
+
+# ---------------------------------------------------------------------------
 # Test 3: Simple form with submit button — success element found, returns True
 # ---------------------------------------------------------------------------
 

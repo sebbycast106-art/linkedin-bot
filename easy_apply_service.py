@@ -85,7 +85,7 @@ def try_easy_apply(page, job_url: str) -> bool:
             print(f"[easy_apply] {job_url[:60]}: skipped", flush=True)
             return False
 
-        # Check for cover letter textarea > 100 chars required
+        # Check for cover letter textarea — generate and fill instead of skipping
         textareas = page.query_selector_all("textarea")
         for textarea in textareas:
             label_text = ""
@@ -94,11 +94,20 @@ def try_easy_apply(page, job_url: str) -> bool:
             except Exception:
                 pass
             if "cover" in label_text.lower():
-                dismiss_btn = page.query_selector("button[aria-label='Dismiss']")
-                if dismiss_btn:
-                    dismiss_btn.click()
-                print(f"[easy_apply] {job_url[:60]}: skipped", flush=True)
-                return False
+                cover_text = None
+                try:
+                    from ai_service import generate_cover_letter
+                    cover_text = generate_cover_letter(title_from_page, company_from_page, description or "")
+                except Exception:
+                    pass
+                if cover_text:
+                    try:
+                        textarea.fill(cover_text)
+                        random_delay(0.5, 1.0)
+                    except Exception:
+                        pass
+                # Don't skip — continue with the rest of the form
+                break
 
         # Check for Review button (multi-step) — skip
         review_btn = page.query_selector("button[aria-label*='Review']")

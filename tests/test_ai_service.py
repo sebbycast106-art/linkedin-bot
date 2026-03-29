@@ -1,5 +1,6 @@
 from unittest.mock import patch, MagicMock
 import ai_service
+from ai_service import generate_cover_letter
 
 def test_generate_comment_returns_string():
     mock_client = MagicMock()
@@ -35,3 +36,17 @@ def test_generate_connection_message_returns_none_on_error():
     with patch("ai_service.anthropic.Anthropic", side_effect=Exception("err")):
         result = ai_service.generate_connection_message("John", "Analyst", "Goldman")
     assert result is None
+
+def test_generate_cover_letter_returns_string():
+    with patch("ai_service.anthropic.Anthropic") as mock_client_cls:
+        mock_client = mock_client_cls.return_value
+        mock_client.messages.create.return_value.content = [MagicMock(text="I am excited to apply for this role.")]
+        result = generate_cover_letter("Analyst", "Goldman", "Finance role")
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+def test_generate_cover_letter_returns_none_on_error():
+    with patch("ai_service.anthropic.Anthropic") as mock_client_cls:
+        mock_client_cls.return_value.messages.create.side_effect = Exception("API error")
+        result = generate_cover_letter("Analyst", "Goldman", "Finance role")
+        assert result is None
