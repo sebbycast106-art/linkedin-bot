@@ -45,3 +45,37 @@ def test_connector_returns_ok(client):
         res = client.post("/internal/run-connector?secret=test-secret")
     assert res.status_code == 200
     assert res.json["status"] == "ok"
+
+def test_linkedin_verify_requires_code(client):
+    res = client.post("/internal/linkedin-verify?secret=test-secret", json={})
+    assert res.status_code == 400
+
+def test_linkedin_reset(client):
+    with patch("database.save_state"):
+        res = client.post("/internal/linkedin-reset?secret=test-secret")
+    assert res.json["status"] == "ok"
+
+
+def test_track_application(client):
+    resp = client.post(
+        "/internal/track-application?secret=test-secret",
+        json={"job_id": "abc123", "company": "Goldman Sachs", "title": "Analyst Intern", "url": "https://linkedin.com/jobs/123"}
+    )
+    assert resp.status_code == 200
+    assert resp.json["status"] == "ok"
+
+
+def test_track_application_missing_fields(client):
+    resp = client.post("/internal/track-application?secret=test-secret", json={"job_id": "x"})
+    assert resp.status_code == 400
+
+
+def test_list_applications(client):
+    resp = client.get("/internal/applications?secret=test-secret")
+    assert resp.status_code == 200
+    assert "applications" in resp.json
+
+
+def test_check_follow_ups_endpoint(client):
+    resp = client.post("/internal/check-follow-ups?secret=test-secret")
+    assert resp.json["status"] == "ok"

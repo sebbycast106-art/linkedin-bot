@@ -109,7 +109,18 @@ class LinkedInSession:
             page.wait_for_load_state("networkidle", timeout=15000)
             random_delay(2, 4)
             if "checkpoint" in page.url or "challenge" in page.url:
-                msg = f"⚠️ LinkedIn security challenge detected!\nURL: {page.url}\n\nManual action needed: check your email for a verification code, then re-trigger login."
+                database.save_state("linkedin_challenge_state.json", {
+                    "challenge_url": page.url,
+                    "cookies": self._context.cookies(),
+                    "detected_at": time.time(),
+                })
+                msg = (
+                    f"⚠️ LinkedIn security challenge detected!\n"
+                    f"URL: {page.url}\n\n"
+                    f"Check your email for a 6-digit code, then call:\n"
+                    f"POST /internal/linkedin-verify with body {{\"code\": \"XXXXXX\"}}\n\n"
+                    f"Or POST /internal/linkedin-reset to clear state and start fresh."
+                )
                 print(f"[session] {msg}", flush=True)
                 try:
                     import telegram_service
