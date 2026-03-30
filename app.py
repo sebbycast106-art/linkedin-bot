@@ -603,6 +603,32 @@ def flush_notifications_endpoint():
     return jsonify({"status": "ok", "message": "notification flush started"})
 
 
+def _run_games_task():
+    from games_service import run_all_games
+    from telegram_service import send_telegram
+    try:
+        results = run_all_games()
+        won = sum(1 for v in results.values() if v)
+        total = len(results)
+        send_telegram(f"🎮 LinkedIn Games: {won}/{total} won — {results}")
+    except Exception as e:
+        print(f"[games] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ LinkedIn Games failed: {e}")
+        except Exception:
+            pass
+
+
+@app.route("/internal/run-games", methods=["POST"])
+def run_games():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_games_task, daemon=True).start()
+    return jsonify({"status": "ok", "message": "games started"})
+
+
 def _run_status_detector():
     from app_status_detector_service import run_status_detection
     try:
