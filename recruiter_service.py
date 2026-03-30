@@ -30,6 +30,12 @@ from telegram_service import send_telegram
 
 _STATE_FILE = "recruiter_state.json"
 _DAILY_LIMIT = 10
+_MAX_MESSAGED_IDS = 2000
+
+_FALLBACK_NOTE = (
+    "Hi, I'm a Northeastern sophomore interested in finance/fintech co-ops. "
+    "I'd love to connect and learn more about opportunities at your firm!"
+)
 
 _TARGET_SEARCHES = [
     "recruiter Fidelity",
@@ -135,7 +141,7 @@ def run_recruiter_outreach(session) -> dict:
                         )
                         note = ai_service.generate_connection_message(
                             name, title, company_from_title, headline=title
-                        )
+                        ) or _FALLBACK_NOTE
 
                         connect_btn.click()
                         random_delay(1, 2)
@@ -227,10 +233,19 @@ def run_followup_check(session) -> dict:
                             if send_btn:
                                 send_btn.click()
                                 random_delay(1, 2)
-
-                    messaged_ids.append(profile_id)
-                    messaged += 1
-                    print(f"[recruiter] follow-up sent to {name}", flush=True)
+                                messaged_ids.append(profile_id)
+                                messaged += 1
+                                print(f"[recruiter] follow-up sent to {name}", flush=True)
+                            else:
+                                # Send button missing — keep pending for retry
+                                still_pending.append(entry)
+                        else:
+                            # Message box missing — keep pending for retry
+                            still_pending.append(entry)
+                    else:
+                        # AI failed — keep pending so it will be retried next run
+                        print(f"[recruiter] AI failed for {name}, will retry", flush=True)
+                        still_pending.append(entry)
                 else:
                     # Not yet accepted — keep pending
                     still_pending.append(entry)
@@ -243,6 +258,9 @@ def run_followup_check(session) -> dict:
         page.close()
 
     state["pending_followup"] = still_pending
+    # Trim oldest entries to keep the file bounded
+    if len(messaged_ids) > _MAX_MESSAGED_IDS:
+        messaged_ids = messaged_ids[-_MAX_MESSAGED_IDS:]
     state["messaged_ids"] = messaged_ids
     _save_state(state)
 

@@ -86,10 +86,8 @@ def _run_recruiter_outreach():
     from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
-            result = run_recruiter_outreach(session)
-        send_telegram(block("RECRUITER", [
-            ("sent",    f"{result['sent']}  connection requests"),
-        ]))
+            # run_recruiter_outreach() sends its own Telegram summary internally
+            run_recruiter_outreach(session)
     except Exception as e:
         print(f"[recruiter] error: {e}", flush=True)
         try:
@@ -105,10 +103,8 @@ def _run_recruiter_followup():
     from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
-            result = run_followup_check(session)
-        send_telegram(block("RECRUITER FOLLOWUP", [
-            ("messaged", f"{result['messaged']}  messages sent"),
-        ]))
+            # run_followup_check() sends its own Telegram summary internally
+            run_followup_check(session)
     except Exception as e:
         print(f"[recruiter_followup] error: {e}", flush=True)
         try:
@@ -286,7 +282,9 @@ def _run_follow_up_check():
     try:
         messages = check_follow_ups()
         for msg in messages:
-            send_telegram(msg)
+            # check_follow_ups() returns plain text (no HTML), so disable HTML parsing
+            # to avoid Telegram errors when job titles/URLs contain &, <, or >
+            send_telegram(msg, parse_mode="")
         print(f"[follow_up] sent {len(messages)} follow-up reminders", flush=True)
     except Exception as e:
         print(f"[follow_up] error: {e}", flush=True)
@@ -511,6 +509,9 @@ def run_acceptance_check_endpoint():
 @app.route("/internal/telegram-command", methods=["POST"])
 def telegram_command():
     """Handle inbound Telegram message commands."""
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
     from telegram_commands_service import handle_telegram_command
     from telegram_service import send_telegram
     data = request.get_json(force=True, silent=True) or {}
@@ -753,7 +754,8 @@ def warmth_scores():
     if secret != config.SCHEDULER_SECRET():
         return "Forbidden", 403
     from warmth_scorer_service import get_warmth_scores
-    return jsonify({"warmth_scores": get_warmth_scores()})
+    scores = get_warmth_scores()
+    return jsonify({"warmth_scores": scores, "total": len(scores)})
 
 
 @app.route("/internal/run-skill-match", methods=["POST"])
@@ -776,10 +778,6 @@ def job_archive():
     return jsonify({"archived": get_all_archived()})
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
-
-
 @app.route("/internal/run-feed-scrape", methods=["POST"])
 def run_feed_scrape():
     secret = request.args.get("secret", "")
@@ -794,6 +792,11 @@ def run_feed_scrape():
             print(f"[feed_scraper] done: {result}", flush=True)
         except Exception as e:
             print(f"[feed_scraper] error: {e}", flush=True)
+            try:
+                from telegram_service import send_telegram, block
+                send_telegram(block("FEED SCRAPE [err]", [("reason", str(e)[:80])]))
+            except Exception:
+                pass
     threading.Thread(target=_task, daemon=True).start()
     return jsonify({"status": "ok", "message": "feed scrape started"})
 
@@ -813,3 +816,7 @@ def get_posts():
         "total": len(posts),
         "last_scraped": state.get("last_scraped"),
     })
+
+
+if __name__ == "__main__":
+    app.run(debug=False)

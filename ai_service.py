@@ -94,7 +94,7 @@ def generate_cover_letter(title: str, company: str, description: str) -> str | N
     """Generate a short cover letter paragraph for a job application."""
     try:
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY())
-        prompt = f"""Write a 3-sentence cover letter paragraph for a Northeastern University sophomore applying for this role. Be specific, professional, and mention relevant skills. Do NOT start with "Dear" or "To Whom".
+        prompt = f"""Write a 3-sentence cover letter paragraph for a Northeastern University sophomore in the Finance program applying for this role as part of the NEU co-op program. The student has a strong interest in finance, fintech, and quantitative analysis. Be specific to the role and company, highlight relevant skills or coursework (e.g. financial modeling, data analysis, Python), and convey genuine enthusiasm. Sound like a driven college student — confident but not arrogant. Do NOT start with "Dear" or "To Whom". Do NOT use filler phrases like "I am excited to apply".
 
 Title: {title}
 Company: {company}

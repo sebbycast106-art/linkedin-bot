@@ -10,14 +10,12 @@ from telegram_service import send_telegram
 
 
 def run_stale_check(stale_days: int = 21) -> dict:
-    """Find stale 'applied' apps (follow_up_sent + older than stale_days) and notify via Telegram."""
+    """Find stale 'applied' apps (older than stale_days) and notify via Telegram."""
     apps = application_tracker.get_applications(status_filter="applied")
     cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
     stale = []
 
     for app in apps:
-        if not app.get("follow_up_sent"):
-            continue
         applied_at_str = app.get("applied_at", "")
         if not applied_at_str:
             continue
@@ -32,10 +30,11 @@ def run_stale_check(stale_days: int = 21) -> dict:
 
     notified = False
     if stale:
-        lines = [f"📦 {len(stale)} stale application(s) (>{stale_days} days, follow-up sent):"]
+        lines = [f"📦 {len(stale)} stale application(s) (>{stale_days} days):"]
         for app in stale:
             days_ago = (datetime.now(timezone.utc) - datetime.fromisoformat(app["applied_at"])).days
-            lines.append(f"  • {app['company']} — {app['title']} ({days_ago}d ago)")
+            follow_up_label = "follow-up sent" if app.get("follow_up_sent") else "no follow-up yet"
+            lines.append(f"  • {app['company']} — {app['title']} ({days_ago}d ago, {follow_up_label})")
         lines.append("\nConsider archiving via /update [job_id] archived")
         send_telegram("\n".join(lines))
         notified = True

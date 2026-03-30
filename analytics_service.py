@@ -58,6 +58,11 @@ def compute_analytics() -> dict:
         "acceptance_rate": round(acceptance_rate, 4),
         "accepted": accepted,
         "declined": declined,
+        # Top-level aliases so LinkedInPage.jsx stat cards resolve without funnel fallback
+        "jobs_found": seen,
+        "applied": applied,
+        "responded": responded,
+        "interviews": interview,
         "funnel": {
             "seen": seen,
             "applied": applied,

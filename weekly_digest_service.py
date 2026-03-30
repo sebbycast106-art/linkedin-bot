@@ -11,7 +11,7 @@ from datetime import date
 from collections import Counter
 import database
 import config
-from telegram_service import send_telegram
+from telegram_service import send_telegram, block
 
 _SNAPSHOT_FILE = "digest_state.json"
 
@@ -62,6 +62,13 @@ def _get_current_totals() -> dict:
     }
 
 
+def _fmt_delta(n: int) -> str:
+    """Format a delta as +N / -N / 0."""
+    if n > 0:
+        return f"+{n}"
+    return str(n)
+
+
 def run_weekly_digest() -> str:
     today = date.today().isoformat()
 
@@ -80,30 +87,37 @@ def run_weekly_digest() -> str:
     delta_easy_applied = delta("total_easy_applied")
 
     top_companies = totals["top_companies"]
-    if top_companies:
-        companies_lines = "\n".join(
-            f"  \u2022 {company} ({count} apps)" for company, count in top_companies
-        )
-    else:
-        companies_lines = "  \u2022 No applications yet"
 
-    message = (
-        f"\U0001f4ca Weekly LinkedIn Digest \u2014 {today}\n"
-        "\n"
-        "\U0001f91d Connections\n"
-        f"  Total: {totals['total_connections']} (+{delta_connections} this week)\n"
-        f"  Recruiter connects: {totals['total_recruiter_sent']} total, {totals['total_recruiter_messaged']} replied\n"
-        "\n"
-        "\U0001f4bc Job Pipeline\n"
-        f"  Jobs seen: {totals['total_seen_jobs']} total (+{delta_seen} this week)\n"
-        f"  Applied (Easy Apply): {totals['total_easy_applied']} (+{delta_easy_applied})\n"
-        f"  Active pipeline: {totals['active_pipeline']} (responded/interview/offer)\n"
-        "\n"
-        "\U0001f4ec Top companies applied to:\n"
-        f"{companies_lines}\n"
-        "\n"
-        f"\U0001f3af This week: {delta_connections} new connections, {delta_applied} applications, {delta_recruiter_sent} recruiter outreaches"
+    rows = [
+        # Connections section
+        f"── Connections ──",
+        ("total", f"{totals['total_connections']}  ({_fmt_delta(delta_connections)} this week)"),
+        ("recruiters sent", f"{totals['total_recruiter_sent']}  ({totals['total_recruiter_messaged']} replied)"),
+        None,
+        # Job pipeline section
+        f"── Job Pipeline ──",
+        ("jobs seen", f"{totals['total_seen_jobs']}  ({_fmt_delta(delta_seen)} this week)"),
+        ("easy applied", f"{totals['total_easy_applied']}  ({_fmt_delta(delta_easy_applied)} this week)"),
+        ("active pipeline", f"{totals['active_pipeline']}  (responded/interview/offer)"),
+        None,
+        # Top companies section
+        f"── Top Companies ──",
+    ]
+
+    if top_companies:
+        for company, count in top_companies:
+            rows.append((company, f"{count} apps"))
+    else:
+        rows.append("No applications yet")
+
+    note = (
+        f"Week of {today}: "
+        f"{_fmt_delta(delta_connections)} connections  "
+        f"{_fmt_delta(delta_applied)} applications  "
+        f"{_fmt_delta(delta_recruiter_sent)} recruiter outreaches"
     )
+
+    message = block("WEEKLY DIGEST", rows, note=note)
 
     send_telegram(message)
 

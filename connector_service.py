@@ -89,10 +89,7 @@ def run_daily_connections(session: LinkedInSession) -> int:
                         if not profile_id or profile_id in connected_ids:
                             continue
 
-                        if profile_id:
-                            enrichment = profile_scraper.scrape_profile(profile_page, f"https://www.linkedin.com/in/{profile_id}/")
-                        else:
-                            enrichment = {}
+                        enrichment = profile_scraper.scrape_profile(profile_page, f"https://www.linkedin.com/in/{profile_id}/")
                         school = enrichment.get("school", "")
                         headline = enrichment.get("headline", "")
 

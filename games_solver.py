@@ -165,11 +165,13 @@ def solve_zip(grid_size: int, waypoints: dict) -> list[tuple]:
     if dfs(start_r, start_c, 0):
         return path
 
-    # Fallback: try all possible starting cells if first waypoint start fails
+    # Fallback: try all non-waypoint starting cells.
+    # Only non-waypoint cells are valid starts (waypoints must be visited in order,
+    # so the first waypoint can only be started from itself — already tried above).
     for r in range(N):
         for c in range(N):
-            if (r, c) == (start_r, start_c):
-                continue
+            if (r, c) in waypoints:
+                continue  # can't start from a waypoint other than the first one
             visited = [[False] * N for _ in range(N)]
             path = []
             if dfs(r, c, 0):
@@ -242,7 +244,7 @@ def solve_sudoku(grid: list[list[int]], box_w: int = 3, box_h: int = 3) -> list[
 
     if backtrack():
         return g
-    return grid  # return original on failure
+    return None  # return None on failure so callers can detect it reliably
 
 
 # ---------------------------------------------------------------------------

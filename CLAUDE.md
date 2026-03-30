@@ -8,7 +8,7 @@ A LinkedIn automation bot running on Railway (Flask + Playwright + Claude AI). I
 **GitHub repo:** `sebbycast106-art/linkedin-bot` (branch: `master`)
 **Railway project ID:** `6c86be71-80b2-4204-9552-b6c17ffb93cb`
 **Railway service ID:** `c740ddac-a04b-4f5c-b038-7a52eed6f88c`
-**SCHEDULER_SECRET:** `89b6225d7013ee96dffaceac4c10a240`
+**SCHEDULER_SECRET:** see Railway environment variables (do not commit here)
 
 ## What It Does (All Features)
 
@@ -58,14 +58,23 @@ A LinkedIn automation bot running on Railway (Flask + Playwright + Claude AI). I
 | `inbox_state.json` | `{seen_thread_ids[last 500]}` |
 | `application_tracker_state.json` | `{applications[]}` |
 | `job_scraper_state.json` | `{seen_ids[]}` |
-| `watchlist_state.json` | `{seen_job_ids[]}` |
+| `watchlist_state.json` | `{seen_ids[last 5000]}` |
 | `connection_tracker_state.json` | `{pending[], accepted_count, declined_count}` |
 | `interview_prep_state.json` | `{prepped_ids[]}` |
 | `digest_state.json` | Weekly snapshot for delta calculations |
+| `status_detector_state.json` | `{last_run, suggested_updates[]}` |
+| `warmth_scores_state.json` | `{scores{}}` — per-profile engagement warmth scores |
+| `notification_buffer_state.json` | `{buffer[], last_flush}` |
+| `skill_profile_state.json` | `{skills[], target_roles[], updated_at}` |
+| `keyword_alerts_state.json` | `{keywords[], alerted_job_ids[]}` |
+| `feed_posts.json` | `{posts[], last_scraped}` — scraped LinkedIn feed posts |
+| `job_archive_state.json` | `{archived[]}` — saved job descriptions |
+| `games_state.json` | `{<game_id>: {won_date}}` — daily games completion tracking |
+| `message_queue_state.json` | `{queue[]}` — scheduled message reminders |
 
 ## All Cron Jobs (cron-job.org)
 
-API key: `D6H1aOPVp1ICIQ2+PyQsjNtbK+QGjAgEsrSC62DW9kY=`
+API key: see cron-job.org dashboard (do not commit here)
 
 | Job ID | Title | Schedule |
 |--------|-------|---------|
@@ -79,10 +88,9 @@ API key: `D6H1aOPVp1ICIQ2+PyQsjNtbK+QGjAgEsrSC62DW9kY=`
 | 7427569 | LinkedIn Company Watchlist | 8:00 AM ET daily |
 | 7427576 | LinkedIn Weekly Digest | 8:00 AM ET Sunday |
 | 7427653 | LinkedIn Acceptance Check | 2:00 AM ET daily |
-
-**NOT YET ON CRON** (endpoints exist, need cron jobs created):
-- `POST /internal/run-interview-prep` — run daily ~3PM ET
-- `POST /internal/run-alumni-connector` — run Mon/Wed/Fri 10:00 AM ET
+| 7429181 | LinkedIn Interview Prep | 3:00 PM ET daily |
+| 7429182 | LinkedIn Alumni Connector | 10:00 AM ET Mon/Wed/Fri |
+| 7432710 | LinkedIn Daily Games | 8:15 AM ET daily |
 
 ## All Endpoints
 
@@ -119,8 +127,8 @@ API key: `D6H1aOPVp1ICIQ2+PyQsjNtbK+QGjAgEsrSC62DW9kY=`
 | `LINKEDIN_EMAIL` | LinkedIn login email |
 | `LINKEDIN_PASSWORD` | LinkedIn login password |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
-| `TELEGRAM_CHAT_ID` | Telegram user chat ID: `5657653960` |
-| `SCHEDULER_SECRET` | Auth for all internal endpoints: `89b6225d7013ee96dffaceac4c10a240` |
+| `TELEGRAM_CHAT_ID` | Telegram user chat ID (set in Railway) |
+| `SCHEDULER_SECRET` | Auth for all internal endpoints (set in Railway) |
 | `DATA_DIR` | Volume mount path: `/data` |
 
 ## Coding Patterns
@@ -150,11 +158,7 @@ git add -A && git commit -m "feat: ..." && git push origin master
 
 ## What's Left To Do
 
-1. **Create missing cron jobs:**
-   - `POST /internal/run-interview-prep` — daily 3PM ET
-   - `POST /internal/run-alumni-connector` — Mon/Wed/Fri 10AM ET
-
-2. **Potential future features:**
+1. **Potential future features:**
    - Job description archiver (save descriptions for applied jobs)
    - Network analytics dashboard (acceptance rate over time)
    - Better engagement targeting (comment only on posts from target firms)

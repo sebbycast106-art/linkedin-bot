@@ -115,8 +115,12 @@ def run_profile_views_connect(session) -> dict:
                     finally:
                         profile_page.close()
 
-                    # Find Connect button within this viewer card
-                    connect_btn = card.query_selector("button[aria-label*='Connect']")
+                    # Find Connect button within this viewer card.
+                    # Also match "Invite" aria-label variant to be consistent with
+                    # connector_service.py and avoid missing valid Connect buttons.
+                    connect_btn = card.query_selector(
+                        "button[aria-label*='Connect'], button[aria-label*='Invite']"
+                    )
                     if not connect_btn:
                         continue
 
@@ -153,7 +157,8 @@ def run_profile_views_connect(session) -> dict:
                         send_btn.click()
                         connected_viewer_ids.add(profile_id)
                         state["sent_today"] = state.get("sent_today", 0) + 1
-                        state["connected_viewer_ids"] = list(connected_viewer_ids)
+                        # Cap at 2000 entries to prevent unbounded growth (matches other services)
+                        state["connected_viewer_ids"] = list(connected_viewer_ids)[-2000:]
                         sent += 1
                         print(f"[profile_views] connected: {name}", flush=True)
                     else:
@@ -169,7 +174,7 @@ def run_profile_views_connect(session) -> dict:
         finally:
             page.close()
             state["date"] = _today()
-            state["connected_viewer_ids"] = list(connected_viewer_ids)
+            state["connected_viewer_ids"] = list(connected_viewer_ids)[-2000:]
             database.save_state(_STATE_FILE, state)
 
         print(f"[profile_views] checked={checked} sent={sent}", flush=True)

@@ -41,7 +41,17 @@ def try_easy_apply(page, job_url: str) -> bool:
         except Exception:
             pass
 
-        description = job_scorer.scrape_job_description(page, job_url)
+        # Page is already on job_url (navigated above). Extract description without re-navigating.
+        description = ""
+        for sel in (
+            ".jobs-description__content",
+            ".job-details-module__content",
+            ".jobs-box__html-content",
+        ):
+            el = page.query_selector(sel)
+            if el:
+                description = el.inner_text()[:2000]
+                break
         if description:
             desc_score = job_scorer.score_job_description(title_from_page, company_from_page, description)
             if desc_score < 7:
@@ -184,9 +194,10 @@ def run_easy_apply_batch(session, jobs: list) -> dict:
     counts = {"applied": 0, "skipped": 0, "errors": 0}
 
     try:
-        # Load state
+        # Load state — preserve list order so the -2000 cap is deterministic
         state = database.load_state(_STATE_FILE, default={"applied_ids": []})
-        applied_ids = set(state.get("applied_ids", []))
+        applied_ids_list = state.get("applied_ids", [])
+        applied_ids = set(applied_ids_list)
 
         page = session.new_page()
         attempted_this_run = 0
@@ -228,6 +239,8 @@ def run_easy_apply_batch(session, jobs: list) -> dict:
                         job.get("url", ""),
                         status="applied",
                     )
+                    if job_id not in applied_ids:
+                        applied_ids_list.append(job_id)
                     applied_ids.add(job_id)
                     counts["applied"] += 1
                 # not-applicable (no Easy Apply / multi-step) not counted
@@ -238,8 +251,10 @@ def run_easy_apply_batch(session, jobs: list) -> dict:
             if attempted_this_run < _DAILY_LIMIT:
                 random_delay(10, 20)
 
-        # Save updated state
-        state["applied_ids"] = list(applied_ids)
+        # Save updated state — cap to last 2000 to prevent unbounded growth.
+        # Use applied_ids_list (insertion-ordered) so the slice keeps the oldest
+        # IDs, not a random subset from set iteration.
+        state["applied_ids"] = applied_ids_list[-2000:]
         database.save_state(_STATE_FILE, state)
 
     except Exception as e:

@@ -46,7 +46,9 @@ def _today() -> str:
 def _build_search_url(company: str) -> str:
     keywords = f"Northeastern University {company}"
     encoded = urllib.parse.quote_plus(keywords)
-    return f"https://www.linkedin.com/search/results/people/?keywords={encoded}&network=%5B%22S%22%5D"
+    # Include both 1st-degree ("S") and 2nd-degree ("O") connections — alumni at
+    # target firms are almost never already in 1st-degree, so S-only returned ~0 results.
+    return f"https://www.linkedin.com/search/results/people/?keywords={encoded}&network=%5B%22S%22%2C%22O%22%5D"
 
 
 def _generate_alumni_message(name: str, company: str, headline: str = "", school: str = "") -> str:
@@ -142,6 +144,16 @@ def run_alumni_connections(session: LinkedInSession) -> dict:
                         )
                         headline = enrichment.get("headline", "")
                         school = enrichment.get("school", "")
+
+                        # Only send an alumni-framed note when we can confirm they
+                        # actually attended Northeastern.  If the scrape returned no
+                        # school data we skip rather than falsely claim a shared connection.
+                        if school and "northeastern" not in school.lower():
+                            print(
+                                f"[alumni_connector] skipping {name} — school '{school}' is not NEU",
+                                flush=True,
+                            )
+                            continue
 
                         connect_btn = result.query_selector(
                             "button[aria-label*='Connect'], button[aria-label*='Invite']"

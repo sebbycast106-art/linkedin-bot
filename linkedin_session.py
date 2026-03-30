@@ -40,6 +40,8 @@ class LinkedInSession:
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
                 "--disable-extensions",
+                "--no-zygote",
+                "--single-process",
             ],
         )
         self._context = self._browser.new_context(
@@ -61,8 +63,18 @@ class LinkedInSession:
         except Exception as e:
             print(f"[session] cookie save error: {e}", flush=True)
         try:
-            self._browser.close()
-            self._pw.stop()
+            if self._context is not None:
+                self._context.close()
+        except Exception:
+            pass
+        try:
+            if self._browser is not None:
+                self._browser.close()
+        except Exception:
+            pass
+        try:
+            if self._pw is not None:
+                self._pw.stop()
         except Exception:
             pass
 
@@ -102,9 +114,9 @@ class LinkedInSession:
             page.goto("https://www.linkedin.com/login", timeout=20000)
             random_delay(2, 3)
             page.fill("#username", config.LINKEDIN_EMAIL())
-            random_delay(0.5, 1.5)
+            random_delay(1.0, 2.5)
             page.fill("#password", config.LINKEDIN_PASSWORD())
-            random_delay(0.5, 1.5)
+            random_delay(1.0, 2.5)
             page.click("button[type='submit']")
             page.wait_for_load_state("networkidle", timeout=15000)
             random_delay(2, 4)

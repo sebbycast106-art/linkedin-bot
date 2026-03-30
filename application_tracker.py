@@ -2,6 +2,7 @@
 application_tracker.py — Track job applications and send follow-up reminders.
 """
 from datetime import datetime, timezone, timedelta
+import html as _html
 import database
 
 _STATE_FILE = "application_tracker_state.json"
@@ -19,7 +20,7 @@ def _save(state: dict):
 def add_application(job_id: str, company: str, title: str, url: str = "", status: str = "applied") -> str:
     """Record a job application. Returns confirmation message."""
     state = _load()
-    apps = state["applications"]
+    apps = state.get("applications", [])
 
     # Check duplicate
     if any(a["job_id"] == job_id for a in apps):
@@ -47,7 +48,7 @@ def update_status(job_id: str, status: str) -> str:
         return f"Invalid status. Use: {', '.join(sorted(valid))}"
 
     state = _load()
-    for app in state["applications"]:
+    for app in state.get("applications", []):
         if app["job_id"] == job_id:
             app["status"] = status
             _save(state)
@@ -58,7 +59,7 @@ def update_status(job_id: str, status: str) -> str:
 def get_applications(status_filter: str = None) -> list:
     """Return all applications, optionally filtered by status."""
     state = _load()
-    apps = state["applications"]
+    apps = state.get("applications", [])
     if status_filter:
         apps = [a for a in apps if a["status"] == status_filter]
     return sorted(apps, key=lambda a: a["applied_at"], reverse=True)
@@ -71,18 +72,24 @@ def check_follow_ups() -> list[str]:
     messages = []
     changed = False
 
-    for app in state["applications"]:
+    for app in state.get("applications", []):
         if app["status"] not in ("applied",):
             continue
         if app.get("follow_up_sent"):
             continue
         applied_dt = datetime.fromisoformat(app["applied_at"])
+        if applied_dt.tzinfo is None:
+            applied_dt = applied_dt.replace(tzinfo=timezone.utc)
         days_ago = (now - applied_dt).days
         if days_ago >= _FOLLOW_UP_DAYS:
+            company = _html.escape(app['company'])
+            title   = _html.escape(app['title'])
+            status  = _html.escape(app['status'])
+            url     = _html.escape(app.get('url', ''))
             messages.append(
-                f"📬 Follow up on: {app['company']} — {app['title']}\n"
-                f"Applied {days_ago} days ago. Status: {app['status']}\n"
-                f"{app.get('url', '')}"
+                f"📬 Follow up on: {company} — {title}\n"
+                f"Applied {days_ago} days ago. Status: {status}\n"
+                f"{url}"
             )
             app["follow_up_sent"] = True
             changed = True

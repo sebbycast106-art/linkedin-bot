@@ -501,7 +501,11 @@ def run_all_games() -> dict:
         if 'login' in page.url or 'authwall' in page.url:
             print("[games] not logged in — aborting", flush=True)
             browser.close()
-            return {"error": "not_logged_in"}
+            # Fill in all remaining games as failed (not skipped) so app.py
+            # iterates over the correct game_id keys rather than {"error": ...}
+            for game_id in games_to_play:
+                results[game_id] = {"won": False, "skipped": False, "elapsed": 0.0}
+            return results
 
         game_funcs = {
             'patches': play_patches,

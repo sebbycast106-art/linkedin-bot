@@ -68,7 +68,9 @@ def _parse_jobs_from_page(page) -> list:
                 continue
 
             href = link_el.get_attribute("href") or ""
-            job_id = href.split("/view/")[1].split("/")[0].split("?")[0] if "/view/" in href else href[-20:]
+            job_id = href.split("/view/")[1].split("/")[0].split("?")[0] if "/view/" in href else None
+            if not job_id:
+                continue  # skip cards with no parseable job ID — fallback href[-20:] is not stable
 
             jobs.append({
                 "title": (title_el.inner_text() or "").strip(),
