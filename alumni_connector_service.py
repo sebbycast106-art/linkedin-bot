@@ -8,7 +8,7 @@ Public interface:
     run_alumni_connections(session) -> dict
 """
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import anthropic
@@ -17,9 +17,10 @@ import config
 import database
 import profile_scraper
 from linkedin_session import LinkedInSession, random_delay
+from warmup_service import apply_limit
 
 _STATE_FILE = "alumni_connector_state.json"
-_DAILY_CONNECT_LIMIT = 10
+_DAILY_CONNECT_LIMIT = apply_limit(10)
 
 _TARGET_FIRMS = [
     "Citadel",
@@ -41,6 +42,12 @@ _TARGET_FIRMS = [
 
 def _today() -> str:
     return datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+
+
+def _this_monday() -> str:
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    monday = today - timedelta(days=today.weekday())
+    return monday.isoformat()
 
 
 def _build_search_url(company: str) -> str:
@@ -87,12 +94,17 @@ def run_alumni_connections(session: LinkedInSession) -> dict:
 
     Returns {"sent": N, "checked": M}.
     """
-    default_state = {"date": _today(), "sent_today": 0, "connected_ids": []}
+    default_state = {"date": _today(), "sent_today": 0, "connected_ids": [], "week_start": _this_monday(), "sent_this_week": 0}
     state = database.load_state(_STATE_FILE, default=default_state)
 
     # Reset counter on new day
     if state.get("date") != _today():
-        state = {"date": _today(), "sent_today": 0, "connected_ids": state.get("connected_ids", [])}
+        state = {"date": _today(), "sent_today": 0, "connected_ids": state.get("connected_ids", []), "week_start": state.get("week_start", _this_monday()), "sent_this_week": state.get("sent_this_week", 0)}
+
+    # Reset weekly counter on new week
+    if state.get("week_start") != _this_monday():
+        state["sent_this_week"] = 0
+        state["week_start"] = _this_monday()
 
     connected_ids = set(state.get("connected_ids", []))
     total_sent = 0
@@ -182,6 +194,7 @@ def run_alumni_connections(session: LinkedInSession) -> dict:
                             random_delay(3, 6)
                             connected_ids.add(profile_id)
                             state["sent_today"] = state.get("sent_today", 0) + 1
+                            state["sent_this_week"] = state.get("sent_this_week", 0) + 1
                             state["connected_ids"] = list(connected_ids)[-2000:]
                             total_sent += 1
                             print(f"[alumni_connector] connected: {name} at {company}", flush=True)

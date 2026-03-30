@@ -7,6 +7,7 @@ Public interface:
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 import database
+from warmup_service import get_warmup_info
 
 _CONNECTOR_STATE      = "connector_state.json"
 _RECRUITER_STATE      = "recruiter_state.json"
@@ -24,10 +25,14 @@ _SKILL_PROFILE_STATE   = "skill_profile_state.json"
 _WARMTH_SCORES_STATE   = "warmth_scores_state.json"
 
 _CONNECT_DAILY_LIMIT    = 20
+_CONNECT_WEEKLY_LIMIT   = 100
 _RECRUITER_DAILY_LIMIT  = 10
-_PROFILE_VIEWS_LIMIT    = 10
+_PROFILE_VIEWS_LIMIT    = 80
 _LIKES_LIMIT            = 50
 _COMMENTS_LIMIT         = 20
+_MESSAGES_DAILY_LIMIT   = 20
+
+_ALUMNI_STATE = "alumni_connector_state.json"
 
 _FOLLOWUP_DAYS = 5
 
@@ -37,6 +42,7 @@ def get_status() -> dict:
         today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
 
         connector   = database.load_state(_CONNECTOR_STATE,     default={})
+        alumni      = database.load_state(_ALUMNI_STATE,        default={})
         recruiter   = database.load_state(_RECRUITER_STATE,     default={})
         pv          = database.load_state(_PROFILE_VIEWS_STATE, default={})
         engagement  = database.load_state(_ENGAGEMENT_STATE,    default={})
@@ -81,6 +87,37 @@ def get_status() -> dict:
                     pending_followup_count += 1
             except (ValueError, TypeError):
                 pass
+
+        # ── Safety meter data ──────────────────────────────────────────────
+        connects_today = (
+            (connector.get("connects_today", 0) if connector.get("date") == today else 0)
+            + (alumni.get("sent_today", 0) if alumni.get("date") == today else 0)
+        )
+        connects_this_week = (
+            connector.get("sent_this_week", 0)
+            + alumni.get("sent_this_week", 0)
+        )
+        messages_today = recruiter.get("sent_today", 0) if recruiter.get("date") == today else 0
+        views_today = pv.get("sent_today", 0) if pv.get("date") == today else 0
+        likes_today = engagement.get("likes", 0) if engagement.get("date") == today else 0
+
+        def _pct(val, limit):
+            return (val / limit * 100) if limit else 0
+
+        pcts = [
+            _pct(connects_today, _CONNECT_DAILY_LIMIT),
+            _pct(connects_this_week, _CONNECT_WEEKLY_LIMIT),
+            _pct(messages_today, _MESSAGES_DAILY_LIMIT),
+            _pct(views_today, _PROFILE_VIEWS_LIMIT),
+            _pct(likes_today, _LIKES_LIMIT),
+        ]
+        max_pct = max(pcts) if pcts else 0
+        if max_pct >= 90:
+            risk_level = "danger"
+        elif max_pct >= 70:
+            risk_level = "caution"
+        else:
+            risk_level = "safe"
 
         return {
             "today": today,
@@ -147,6 +184,28 @@ def get_status() -> dict:
                     reverse=True,
                 )[:3],
             },
+            "safety": {
+                "connections": {
+                    "today": connects_today,
+                    "today_limit": _CONNECT_DAILY_LIMIT,
+                    "week": connects_this_week,
+                    "week_limit": _CONNECT_WEEKLY_LIMIT,
+                },
+                "messages": {
+                    "today": messages_today,
+                    "today_limit": _MESSAGES_DAILY_LIMIT,
+                },
+                "profile_views": {
+                    "today": views_today,
+                    "today_limit": _PROFILE_VIEWS_LIMIT,
+                },
+                "likes": {
+                    "today": likes_today,
+                    "today_limit": _LIKES_LIMIT,
+                },
+                "risk_level": risk_level,
+            },
+            "warmup": get_warmup_info(),
         }
 
     except Exception as e:

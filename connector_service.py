@@ -9,15 +9,16 @@ Public interface:
     run_daily_connections(session) -> int
 """
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from linkedin_session import LinkedInSession, random_delay
 import ai_service
 import database
 import profile_scraper
+from warmup_service import apply_limit
 
 _STATE_FILE = "connector_state.json"
-_DAILY_CONNECT_LIMIT = 20
+_DAILY_CONNECT_LIMIT = apply_limit(20)
 
 _SEARCH_QUERIES = [
     {"keywords": "finance Northeastern University", "network": "S,O"},
@@ -32,6 +33,12 @@ def _today() -> str:
     return datetime.now(ZoneInfo("America/New_York")).date().isoformat()
 
 
+def _this_monday() -> str:
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    monday = today - timedelta(days=today.weekday())
+    return monday.isoformat()
+
+
 def _get_daily_count(state: dict) -> int:
     if state.get("date") != _today():
         return 0
@@ -40,9 +47,15 @@ def _get_daily_count(state: dict) -> int:
 
 def _increment(state: dict) -> dict:
     today = _today()
+    monday = _this_monday()
     if state.get("date") != today:
         state = {"date": today, "connects_today": 0, "connected_ids": state.get("connected_ids", [])}
     state["connects_today"] = state.get("connects_today", 0) + 1
+    # Weekly tracking
+    if state.get("week_start") != monday:
+        state["sent_this_week"] = 0
+        state["week_start"] = monday
+    state["sent_this_week"] = state.get("sent_this_week", 0) + 1
     return state
 
 
@@ -52,7 +65,11 @@ def _build_search_url(keywords: str, network: str = "O") -> str:
 
 
 def run_daily_connections(session: LinkedInSession) -> int:
-    state = database.load_state(_STATE_FILE, default={"date": _today(), "connects_today": 0, "connected_ids": []})
+    state = database.load_state(_STATE_FILE, default={"date": _today(), "connects_today": 0, "connected_ids": [], "week_start": _this_monday(), "sent_this_week": 0})
+    # Ensure weekly tracking fields exist and are current
+    if state.get("week_start") != _this_monday():
+        state["sent_this_week"] = 0
+        state["week_start"] = _this_monday()
     connected_ids = set(state.get("connected_ids", []))
     total_sent = 0
 
