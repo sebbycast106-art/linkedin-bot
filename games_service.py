@@ -449,7 +449,11 @@ def play_tango(page: Page) -> bool:
 
 # ── MAIN RUNNER ──────────────────────────────────────────────────────────
 def run_all_games() -> dict:
-    """Run all 4 games with headless Firefox. Skip games already won today."""
+    """
+    Run all 4 games with headless Firefox. Skip games already won today.
+    Returns {game_id: {"won": bool, "skipped": bool, "elapsed": float}}
+    """
+    import time
     today = datetime.date.today().isoformat()
     state = database.load_state(_STATE_FILE, default={})
 
@@ -459,7 +463,7 @@ def run_all_games() -> dict:
     for game_id in ['patches', 'zip', 'mini-sudoku', 'tango']:
         if state.get(game_id, {}).get('won_date') == today:
             print(f"[games] {game_id} already won today, skipping", flush=True)
-            results[game_id] = True
+            results[game_id] = {"won": True, "skipped": True, "elapsed": 0.0}
         else:
             games_to_play.append(game_id)
 
@@ -508,9 +512,11 @@ def run_all_games() -> dict:
 
         for game_id in games_to_play:
             print(f"[games] playing {game_id}...", flush=True)
+            t0 = time.time()
             won = game_funcs[game_id](page)
-            results[game_id] = won
-            print(f"[games] {game_id}: {'WON' if won else 'failed'}", flush=True)
+            elapsed = time.time() - t0
+            results[game_id] = {"won": won, "skipped": False, "elapsed": elapsed}
+            print(f"[games] {game_id}: {'WON' if won else 'failed'} ({elapsed:.0f}s)", flush=True)
             if won:
                 state[game_id] = {"won_date": today}
                 database.save_state(_STATE_FILE, state)

@@ -365,17 +365,22 @@ def _run_profile_views():
 def _run_inbox_check():
     from linkedin_session import LinkedInSession
     from inbox_monitor_service import run_inbox_check
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_inbox_check(session)
         if result['notified'] == 0:
             print(f"[inbox] checked {result['found']} threads, no recruiter messages", flush=True)
+        else:
+            send_telegram(block("INBOX", [
+                ("threads",  result['found']),
+                ("alerted",  f"{result['notified']}  recruiter messages"),
+            ]))
     except Exception as e:
         print(f"[inbox] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Inbox check failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("INBOX [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -410,31 +415,36 @@ def run_inbox_check_endpoint():
 def _run_watchlist_check():
     from linkedin_session import LinkedInSession
     from company_watchlist_service import run_watchlist_check
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_watchlist_check(session)
-        print(f"[watchlist] {result['alerts_sent']} alerts, {result['companies_checked']} companies checked", flush=True)
+        if result['alerts_sent'] > 0:
+            send_telegram(block("WATCHLIST", [
+                ("checked",  f"{result['companies_checked']}  companies"),
+                ("alerts",   f"{result['alerts_sent']}  new postings"),
+            ]))
+        else:
+            print(f"[watchlist] {result['companies_checked']} companies checked, no new postings", flush=True)
     except Exception as e:
         print(f"[watchlist] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Watchlist check failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("WATCHLIST [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
 
 def _run_weekly_digest():
     from weekly_digest_service import run_weekly_digest
-    from telegram_service import send_telegram
     try:
         run_weekly_digest()
         print("[weekly_digest] sent", flush=True)
     except Exception as e:
         print(f"[weekly_digest] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Weekly digest failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("WEEKLY DIGEST [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -469,16 +479,22 @@ def run_weekly_digest_endpoint():
 def _run_acceptance_check():
     from linkedin_session import LinkedInSession
     from connection_tracker_service import run_acceptance_check
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_acceptance_check(session)
-        print(f"[acceptance_check] {result['accepted']} accepted, {result['still_pending']} pending", flush=True)
+        if result['accepted'] > 0:
+            send_telegram(block("CONNECTIONS", [
+                ("accepted",  result['accepted']),
+                ("pending",   result['still_pending']),
+            ]))
+        else:
+            print(f"[acceptance_check] {result['accepted']} accepted, {result['still_pending']} pending", flush=True)
     except Exception as e:
         print(f"[acceptance_check] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Acceptance check failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("CONNECTIONS [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -523,16 +539,19 @@ def _run_interview_prep_check():
 def _run_alumni_connections():
     from linkedin_session import LinkedInSession
     from alumni_connector_service import run_alumni_connections
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_alumni_connections(session)
-        send_telegram(f"🎓 Alumni connector: {result['sent']} connection requests sent ({result['checked']} checked)")
+        send_telegram(block("ALUMNI CONNECTOR", [
+            ("checked", result['checked']),
+            ("sent",    f"{result['sent']}  connection requests"),
+        ]))
     except Exception as e:
         print(f"[alumni_connector] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Alumni connector failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("ALUMNI CONNECTOR [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -572,8 +591,8 @@ def _run_stale_check():
     except Exception as e:
         print(f"[stale_check] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Stale app check failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("STALE CHECK [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -586,8 +605,8 @@ def _run_keyword_alerts():
     except Exception as e:
         print(f"[keyword_alerts] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Keyword alerts failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("KEYWORD ALERTS [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -600,8 +619,8 @@ def _run_flush_notifications():
     except Exception as e:
         print(f"[notifications] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Notification flush failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("NOTIFICATIONS [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -633,19 +652,41 @@ def flush_notifications_endpoint():
     return jsonify({"status": "ok", "message": "notification flush started"})
 
 
+def _fmt_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    return f"{s // 60}m{s % 60:02d}s"
+
+
 def _run_games_task():
     from games_service import run_all_games
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         results = run_all_games()
-        won = sum(1 for v in results.values() if v)
+        rows = []
+        total_elapsed = 0.0
+        won_count = 0
+        for game_id, info in results.items():
+            if isinstance(info, dict):
+                won      = info.get("won", False)
+                skipped  = info.get("skipped", False)
+                elapsed  = info.get("elapsed", 0.0)
+            else:
+                won, skipped, elapsed = bool(info), False, 0.0
+            total_elapsed += elapsed
+            if won:
+                won_count += 1
+            status = "already done" if skipped else ("solved" if won else "FAILED")
+            rows.append((game_id, f"{status:<16}{_fmt_elapsed(elapsed) if not skipped else ''}"))
         total = len(results)
-        send_telegram(f"🎮 LinkedIn Games: {won}/{total} won — {results}")
+        note = f"{won_count}/{total}  complete   total {_fmt_elapsed(total_elapsed)}"
+        send_telegram(block("GAMES", rows, note=note))
     except Exception as e:
         print(f"[games] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ LinkedIn Games failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("GAMES [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -667,8 +708,8 @@ def _run_status_detector():
     except Exception as e:
         print(f"[status_detector] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Status detector failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("STATUS DETECTOR [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -681,8 +722,8 @@ def _run_message_queue():
     except Exception as e:
         print(f"[message_queue] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Message queue failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("MESSAGE QUEUE [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
