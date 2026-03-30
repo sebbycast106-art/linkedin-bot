@@ -112,6 +112,11 @@ def run_acceptance_check(session) -> dict:
                     # Connection was accepted
                     state["accepted_count"] = state.get("accepted_count", 0) + 1
                     accepted += 1
+                    try:
+                        from warmth_scorer_service import record_signal
+                        record_signal(profile_id, entry.get("name", ""), "connection_accepted")
+                    except Exception:
+                        pass
                     print(
                         f"[connection_tracker] accepted: {entry.get('name', profile_id)}",
                         flush=True,

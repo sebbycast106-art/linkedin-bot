@@ -22,6 +22,26 @@ _TARGET_HASHTAGS = [
     "venturecapital", "business", "northeastern",
 ]
 
+_TARGET_COMPANIES = {
+    "citadel", "jane street", "point72", "two sigma", "bridgewater",
+    "goldman sachs", "blackrock", "fidelity", "jpmorgan", "morgan stanley",
+    "sequoia", "general catalyst", "robinhood", "stripe",
+}
+
+_RELEVANT_KEYWORDS = {
+    "finance", "fintech", "banking", "investment", "venture", "capital",
+    "trading", "portfolio", "analyst", "quant", "hedge fund", "asset management",
+    "private equity", "startup", "entrepreneur", "northeastern",
+}
+
+
+def _is_relevant_post(author: str, post_text: str) -> bool:
+    combined = (author + " " + post_text).lower()
+    if any(company in combined for company in _TARGET_COMPANIES):
+        return True
+    matches = sum(1 for kw in _RELEVANT_KEYWORDS if kw in combined)
+    return matches >= 2
+
 
 def _today() -> str:
     return datetime.now(ZoneInfo("America/New_York")).date().isoformat()
@@ -84,6 +104,9 @@ def engage_hashtag(session: LinkedInSession, hashtag: str, max_posts: int = 5) -
             if processed >= max_posts:
                 break
             try:
+                post_text = _get_post_text(post)
+                author = _get_author_name(post)
+
                 if can_act("likes", state):
                     like_btn = post.query_selector("button[aria-label*='Like'], button[aria-label*='like']")
                     if like_btn and "filled" not in (like_btn.get_attribute("aria-pressed") or ""):
@@ -92,9 +115,7 @@ def engage_hashtag(session: LinkedInSession, hashtag: str, max_posts: int = 5) -
                         state = increment_action("likes", state)
                         liked += 1
 
-                if can_act("comments", state):
-                    post_text = _get_post_text(post)
-                    author = _get_author_name(post)
+                if can_act("comments", state) and _is_relevant_post(author, post_text):
                     if len(post_text) > 30:
                         comment = ai_service.generate_comment(post_text, author)
                         if comment:

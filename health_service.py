@@ -16,6 +16,12 @@ _EASY_APPLY_STATE     = "easy_apply_state.json"
 _INBOX_STATE          = "inbox_state.json"
 _APP_TRACKER_STATE    = "application_tracker_state.json"
 _JOB_SCRAPER_STATE    = "job_scraper_state.json"
+_KEYWORD_ALERTS_STATE = "keyword_alerts_state.json"
+_NOTIFICATION_STATE   = "notification_buffer_state.json"
+_STATUS_DETECTOR_STATE = "status_detector_state.json"
+_MESSAGE_QUEUE_STATE   = "message_queue_state.json"
+_SKILL_PROFILE_STATE   = "skill_profile_state.json"
+_WARMTH_SCORES_STATE   = "warmth_scores_state.json"
 
 _CONNECT_DAILY_LIMIT    = 20
 _RECRUITER_DAILY_LIMIT  = 10
@@ -38,11 +44,17 @@ def get_status() -> dict:
         inbox       = database.load_state(_INBOX_STATE,         default={})
         app_tracker = database.load_state(_APP_TRACKER_STATE,   default={})
         job_scraper = database.load_state(_JOB_SCRAPER_STATE,   default={})
+        kw_alerts   = database.load_state(_KEYWORD_ALERTS_STATE, default={})
+        notif_buffer = database.load_state(_NOTIFICATION_STATE,  default={})
+        status_det  = database.load_state(_STATUS_DETECTOR_STATE, default={})
+        msg_queue   = database.load_state(_MESSAGE_QUEUE_STATE,   default={})
+        skill_prof  = database.load_state(_SKILL_PROFILE_STATE,   default={})
+        warmth      = database.load_state(_WARMTH_SCORES_STATE,   default={})
 
         applications = app_tracker.get("applications", [])
 
         # by_status counts
-        status_keys = ["seen", "applied", "responded", "interview", "offer", "rejected"]
+        status_keys = ["seen", "applied", "responded", "interview", "offer", "rejected", "archived"]
         by_status = {k: 0 for k in status_keys}
         for app in applications:
             s = app.get("status", "")
@@ -104,6 +116,36 @@ def get_status() -> dict:
             },
             "inbox": {
                 "seen_threads": len(inbox.get("seen_thread_ids", [])),
+            },
+            "keyword_alerts": {
+                "keyword_count": len(kw_alerts.get("keywords", [])),
+                "alerted_count": len(kw_alerts.get("alerted_job_ids", [])),
+            },
+            "notification_buffer": {
+                "buffer_size": len(notif_buffer.get("buffer", [])),
+                "last_flush": notif_buffer.get("last_flush", ""),
+            },
+            "status_detector": {
+                "last_run": status_det.get("last_run", ""),
+                "suggested_count": len(status_det.get("suggested_updates", [])),
+            },
+            "message_queue": {
+                "queue_size": len(msg_queue.get("queue", [])),
+                "pending": len([e for e in msg_queue.get("queue", []) if e.get("status") == "pending"]),
+            },
+            "skill_match": {
+                "skill_count": len(skill_prof.get("skills", [])),
+            },
+            "warmth": {
+                "total_tracked": len(warmth.get("scores", {})),
+                "top_3": sorted(
+                    [
+                        {"name": v.get("name", k), "score": v.get("score", 0)}
+                        for k, v in warmth.get("scores", {}).items()
+                    ],
+                    key=lambda x: x["score"],
+                    reverse=True,
+                )[:3],
             },
         }
 

@@ -105,3 +105,77 @@ def test_run_recruiter_followup_returns_ok(client):
         res = client.post("/internal/run-recruiter-followup?secret=test-secret")
     assert res.status_code == 200
     assert res.json["status"] == "ok"
+
+
+# --- New Phase 1 endpoint tests ---
+
+def test_stale_check_rejects_bad_secret(client):
+    res = client.post("/internal/run-stale-check?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_stale_check_returns_ok(client):
+    with patch("app.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = MagicMock()
+        res = client.post("/internal/run-stale-check?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"
+
+
+def test_keyword_alerts_rejects_bad_secret(client):
+    res = client.post("/internal/run-keyword-alerts?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_keyword_alerts_returns_ok(client):
+    with patch("app.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = MagicMock()
+        res = client.post("/internal/run-keyword-alerts?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"
+
+
+def test_flush_notifications_rejects_bad_secret(client):
+    res = client.post("/internal/flush-notifications?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_flush_notifications_returns_ok(client):
+    with patch("app.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = MagicMock()
+        res = client.post("/internal/flush-notifications?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"
+
+
+# --- Phase 2 endpoint tests ---
+
+def test_warmth_scores_rejects_bad_secret(client):
+    res = client.get("/internal/warmth-scores?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_warmth_scores_returns_ok(client):
+    with patch("warmth_scorer_service.database") as mock_db:
+        mock_db.load_state.return_value = {"scores": {}}
+        res = client.get("/internal/warmth-scores?secret=test-secret")
+    assert res.status_code == 200
+    assert "warmth_scores" in res.json
+
+
+def test_run_skill_match_rejects_bad_secret(client):
+    res = client.post("/internal/run-skill-match?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_run_skill_match_returns_ok(client):
+    with patch("skill_match_service.database") as mock_db:
+        mock_db.load_state.return_value = {
+            "skills": ["python"],
+            "target_roles": ["analyst"],
+            "updated_at": "",
+        }
+        res = client.post("/internal/run-skill-match?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"
+    assert "profile" in res.json

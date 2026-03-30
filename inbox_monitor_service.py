@@ -103,6 +103,12 @@ def run_inbox_check(session) -> dict:
             is_recruiter = any(kw in message_text.lower() for kw in _RECRUITER_KEYWORDS)
 
             if is_recruiter:
+                try:
+                    from warmth_scorer_service import record_signal
+                    sender_id = thread_id  # best available identifier
+                    record_signal(sender_id, sender_name, "messaged_us")
+                except Exception:
+                    pass
                 draft = ai_service.generate_inbox_reply(sender_name, sender_title, message_text)
                 alert = (
                     f"📩 LinkedIn message from {sender_name} ({sender_title}):\n\n"

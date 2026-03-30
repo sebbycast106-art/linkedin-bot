@@ -93,6 +93,12 @@ def run_profile_views_connect(session) -> dict:
                     name_el = card.query_selector("span[aria-hidden='true']") or card.query_selector("h3")
                     name = name_el.inner_text().strip() if name_el else ""
 
+                    try:
+                        from warmth_scorer_service import record_signal
+                        record_signal(profile_id, name, "viewed_profile")
+                    except Exception:
+                        pass
+
                     # Extract title
                     title_el = card.query_selector(".profile-views-module__viewer-card-subtitle") or \
                                 card.query_selector(".artdeco-entity-lockup__subtitle") or \

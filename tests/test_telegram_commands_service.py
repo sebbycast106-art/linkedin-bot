@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 
 
 @pytest.fixture(autouse=True)
@@ -82,3 +82,53 @@ def test_handle_none_text():
     from telegram_commands_service import handle_telegram_command
     result = handle_telegram_command(None)
     assert result is None
+
+
+def test_trigger_no_args():
+    from telegram_commands_service import handle_telegram_command
+    result = handle_telegram_command("/trigger")
+    assert "Usage: /trigger" in result
+    assert "scraper" in result
+
+
+def test_trigger_unknown_service():
+    from telegram_commands_service import handle_telegram_command
+    result = handle_telegram_command("/trigger banana")
+    assert "Unknown service" in result
+    assert "banana" in result
+    assert "scraper" in result
+
+
+def test_trigger_scraper_success(monkeypatch):
+    monkeypatch.setenv("SCHEDULER_SECRET", "testsecret")
+    monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "example.up.railway.app")
+
+    mock_resp = MagicMock()
+    mock_resp.ok = True
+    mock_resp.status_code = 200
+
+    with patch("telegram_commands_service.requests.post", return_value=mock_resp) as mock_post:
+        from telegram_commands_service import handle_telegram_command
+        result = handle_telegram_command("/trigger scraper")
+
+    mock_post.assert_called_once()
+    call_url = mock_post.call_args[0][0]
+    assert "run-job-scraper" in call_url
+    assert "testsecret" in call_url
+    assert "Triggered 'scraper' successfully" in result
+
+
+def test_trigger_scraper_failure(monkeypatch):
+    monkeypatch.setenv("SCHEDULER_SECRET", "testsecret")
+    monkeypatch.setenv("RAILWAY_PUBLIC_DOMAIN", "example.up.railway.app")
+
+    mock_resp = MagicMock()
+    mock_resp.ok = False
+    mock_resp.status_code = 500
+
+    with patch("telegram_commands_service.requests.post", return_value=mock_resp) as mock_post:
+        from telegram_commands_service import handle_telegram_command
+        result = handle_telegram_command("/trigger scraper")
+
+    assert "Failed to trigger" in result
+    assert "500" in result

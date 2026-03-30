@@ -516,6 +516,15 @@ def run_interview_prep():
     return jsonify({"status": "ok", "message": "interview prep check started"})
 
 
+@app.route("/internal/analytics", methods=["GET"])
+def analytics():
+    from analytics_service import compute_analytics
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    return jsonify(compute_analytics())
+
+
 @app.route("/internal/run-alumni-connector", methods=["POST"])
 def run_alumni_connector():
     secret = request.args.get("secret", "")
@@ -523,6 +532,151 @@ def run_alumni_connector():
         return "Forbidden", 403
     threading.Thread(target=_run_alumni_connections, daemon=True).start()
     return jsonify({"status": "ok", "message": "alumni connector started"})
+
+
+def _run_stale_check():
+    from stale_app_service import run_stale_check
+    try:
+        result = run_stale_check()
+        print(f"[stale_check] {result['stale_count']} stale, notified={result['notified']}", flush=True)
+    except Exception as e:
+        print(f"[stale_check] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Stale app check failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_keyword_alerts():
+    from keyword_alert_service import run_keyword_alerts
+    try:
+        result = run_keyword_alerts()
+        print(f"[keyword_alerts] matched={result['matched']}, alerted={result['alerted']}", flush=True)
+    except Exception as e:
+        print(f"[keyword_alerts] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Keyword alerts failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_flush_notifications():
+    from notification_service import flush_notifications
+    try:
+        result = flush_notifications()
+        print(f"[notifications] flushed {result['sent']} notifications", flush=True)
+    except Exception as e:
+        print(f"[notifications] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Notification flush failed: {e}")
+        except Exception:
+            pass
+
+
+@app.route("/internal/run-stale-check", methods=["POST"])
+def run_stale_check_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_stale_check, daemon=True).start()
+    return jsonify({"status": "ok", "message": "stale check started"})
+
+
+@app.route("/internal/run-keyword-alerts", methods=["POST"])
+def run_keyword_alerts_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_keyword_alerts, daemon=True).start()
+    return jsonify({"status": "ok", "message": "keyword alerts started"})
+
+
+@app.route("/internal/flush-notifications", methods=["POST"])
+def flush_notifications_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_flush_notifications, daemon=True).start()
+    return jsonify({"status": "ok", "message": "notification flush started"})
+
+
+def _run_status_detector():
+    from app_status_detector_service import run_status_detection
+    try:
+        result = run_status_detection()
+        print(f"[status_detector] detected={result['detected']} suggested={result['suggested']}", flush=True)
+    except Exception as e:
+        print(f"[status_detector] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Status detector failed: {e}")
+        except Exception:
+            pass
+
+
+def _run_message_queue():
+    from message_scheduler_service import run_message_queue
+    try:
+        result = run_message_queue()
+        print(f"[message_queue] reminded={result['reminded']} expired={result['expired']}", flush=True)
+    except Exception as e:
+        print(f"[message_queue] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram
+            send_telegram(f"❌ Message queue failed: {e}")
+        except Exception:
+            pass
+
+
+@app.route("/internal/run-status-detector", methods=["POST"])
+def run_status_detector_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_status_detector, daemon=True).start()
+    return jsonify({"status": "ok", "message": "status detector started"})
+
+
+@app.route("/internal/run-message-queue", methods=["POST"])
+def run_message_queue_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_message_queue, daemon=True).start()
+    return jsonify({"status": "ok", "message": "message queue started"})
+
+
+@app.route("/internal/warmth-scores", methods=["GET"])
+def warmth_scores():
+    """Return warmth scores JSON."""
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    from warmth_scorer_service import get_warmth_scores
+    return jsonify({"warmth_scores": get_warmth_scores()})
+
+
+@app.route("/internal/run-skill-match", methods=["POST"])
+def run_skill_match():
+    """Return skill profile info."""
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    from skill_match_service import get_skill_profile
+    return jsonify({"status": "ok", "profile": get_skill_profile()})
+
+
+@app.route("/internal/job-archive", methods=["GET"])
+def job_archive():
+    """Return all archived job descriptions."""
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    from job_archive_service import get_all_archived
+    return jsonify({"archived": get_all_archived()})
 
 
 if __name__ == "__main__":

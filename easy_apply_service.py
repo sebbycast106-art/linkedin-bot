@@ -25,6 +25,7 @@ def try_easy_apply(page, job_url: str) -> bool:
     Returns True if successfully applied, False if skipped or failed.
     """
     result = False
+    job_id_from_url = job_url.split("/view/")[1].split("/")[0].split("?")[0] if "/view/" in job_url else job_url[-20:]
     try:
         page.goto(job_url, timeout=20000)
         random_delay(2, 3)
@@ -152,6 +153,13 @@ def try_easy_apply(page, job_url: str) -> bool:
                 except Exception:
                     pass
 
+        if result and description:
+            try:
+                from job_archive_service import archive_description
+                archive_description(job_id_from_url, title_from_page, company_from_page, job_url, description)
+            except Exception:
+                pass
+
     except Exception as e:
         print(f"[easy_apply] error on {job_url[:60]}: {e}", flush=True)
         try:
@@ -194,6 +202,22 @@ def run_easy_apply_batch(session, jobs: list) -> dict:
                 continue
 
             attempted_this_run += 1
+
+            # Skill match check — skip jobs that don't match user profile
+            try:
+                from skill_match_service import score_job_match
+                skill_score = score_job_match(
+                    job.get("title", ""),
+                    job.get("company", ""),
+                    job.get("description", ""),
+                )
+                if skill_score < 50:
+                    print(f"[easy_apply] {job_id}: skill match too low ({skill_score}/100) — skipping", flush=True)
+                    counts["skipped"] += 1
+                    continue
+            except Exception as e:
+                print(f"[easy_apply] skill match check failed for {job_id}: {e}", flush=True)
+
             try:
                 success = try_easy_apply(page, job["url"])
                 if success:

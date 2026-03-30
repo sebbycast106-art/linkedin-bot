@@ -28,3 +28,20 @@ def test_increment_action_resets_on_new_day():
         result = engagement_service.increment_action("comments", state)
     assert result["comments"] == 1
     assert result["date"] == "2026-03-27"
+
+
+def test_is_relevant_post_target_company():
+    assert engagement_service._is_relevant_post("Jane Street", "We are hiring interns") is True
+
+
+def test_is_relevant_post_two_keywords():
+    assert engagement_service._is_relevant_post("Someone", "Great fintech startup opportunity") is True
+
+
+def test_is_relevant_post_irrelevant():
+    assert engagement_service._is_relevant_post("Random Person", "Had a great lunch today") is False
+
+
+def test_is_relevant_post_case_insensitive():
+    assert engagement_service._is_relevant_post("GOLDMAN SACHS", "check us out") is True
+    assert engagement_service._is_relevant_post("someone", "FINANCE and TRADING insights") is True

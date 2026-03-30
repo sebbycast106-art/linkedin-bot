@@ -42,7 +42,7 @@ def add_application(job_id: str, company: str, title: str, url: str = "", status
 
 def update_status(job_id: str, status: str) -> str:
     """Update application status. Returns confirmation or error."""
-    valid = {"applied", "responded", "interview", "offer", "rejected", "seen"}
+    valid = {"applied", "responded", "interview", "offer", "rejected", "seen", "archived"}
     if status not in valid:
         return f"Invalid status. Use: {', '.join(sorted(valid))}"
 
@@ -98,7 +98,7 @@ def format_applications_summary() -> str:
     if not apps:
         return "No applications tracked yet."
 
-    active = [a for a in apps if a["status"] not in ("rejected", "seen")]
+    active = [a for a in apps if a["status"] not in ("rejected", "seen", "archived")]
     seen = [a for a in apps if a["status"] == "seen"]
     by_status = {}
     for a in active:
