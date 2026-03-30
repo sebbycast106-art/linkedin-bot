@@ -11,7 +11,7 @@ def _run_job_scraper():
     from linkedin_session import LinkedInSession
     from job_scraper import scrape_new_jobs, format_job_message
     from job_scorer import filter_and_score_jobs
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             jobs = scrape_new_jobs(session)
@@ -20,8 +20,12 @@ def _run_job_scraper():
             return
         scored_jobs = filter_and_score_jobs(jobs, min_score=6)
         display_jobs = scored_jobs if scored_jobs else jobs[:10]
-        header = f"💼 {len(scored_jobs)}/{len(jobs)} relevant co-op/internship listings:\n\n"
-        send_telegram(header + "\n\n".join(format_job_message(j) for j in display_jobs[:10]))
+        send_telegram(block("JOBS", [
+            ("scraped",   len(jobs)),
+            ("relevant",  f"{len(scored_jobs)}  (score ≥6)"),
+            ("showing",   len(display_jobs)),
+        ]))
+        send_telegram("\n\n".join(format_job_message(j) for j in display_jobs[:10]), parse_mode="HTML")
         for job in jobs:
             try:
                 add_application(job["job_id"], job["company"], job["title"], job.get("url", ""), status="seen")
@@ -31,8 +35,8 @@ def _run_job_scraper():
     except Exception as e:
         print(f"[job_scraper] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ LinkedIn job scraper failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("JOBS [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -40,16 +44,19 @@ def _run_job_scraper():
 def _run_engagement():
     from linkedin_session import LinkedInSession
     from engagement_service import run_daily_engagement
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_daily_engagement(session)
-        send_telegram(f"✅ LinkedIn engagement: {result['liked']} likes, {result['commented']} comments")
+        send_telegram(block("ENGAGEMENT", [
+            ("liked",     result['liked']),
+            ("commented", result['commented']),
+        ]))
     except Exception as e:
         print(f"[engagement] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ LinkedIn engagement failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("ENGAGEMENT [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -57,16 +64,18 @@ def _run_engagement():
 def _run_connector():
     from linkedin_session import LinkedInSession
     from connector_service import run_daily_connections
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             count = run_daily_connections(session)
-        send_telegram(f"🤝 LinkedIn connector: {count} connection requests sent")
+        send_telegram(block("CONNECTOR", [
+            ("sent",  f"{count}  requests"),
+        ]))
     except Exception as e:
         print(f"[connector] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ LinkedIn connector failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("CONNECTOR [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -74,16 +83,18 @@ def _run_connector():
 def _run_recruiter_outreach():
     from linkedin_session import LinkedInSession
     from recruiter_service import run_recruiter_outreach
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_recruiter_outreach(session)
-        send_telegram(f"🤝 Recruiter outreach: {result['sent']} connection requests sent")
+        send_telegram(block("RECRUITER", [
+            ("sent",    f"{result['sent']}  connection requests"),
+        ]))
     except Exception as e:
         print(f"[recruiter] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Recruiter outreach failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("RECRUITER [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -91,16 +102,18 @@ def _run_recruiter_outreach():
 def _run_recruiter_followup():
     from linkedin_session import LinkedInSession
     from recruiter_service import run_followup_check
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_followup_check(session)
-        send_telegram(f"💬 Recruiter follow-ups: {result['messaged']} messages sent")
+        send_telegram(block("RECRUITER FOLLOWUP", [
+            ("messaged", f"{result['messaged']}  messages sent"),
+        ]))
     except Exception as e:
         print(f"[recruiter_followup] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Recruiter follow-up failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("RECRUITER FOLLOWUP [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -125,9 +138,14 @@ def login_test():
                 page.goto("https://www.linkedin.com/feed/", timeout=20000)
                 url = page.url
                 page.close()
-            send_telegram(f"✅ LinkedIn login OK — landed on: {url}")
+            from telegram_service import block
+            send_telegram(block("LOGIN TEST", [
+                ("status",  "OK"),
+                ("landed",  url[:60]),
+            ]))
         except Exception as e:
-            send_telegram(f"❌ LinkedIn login test failed: {e}")
+            from telegram_service import block
+            send_telegram(block("LOGIN TEST [err]", [("reason", str(e)[:80])]))
 
     threading.Thread(target=_test, daemon=True).start()
     return jsonify({"status": "ok", "message": "login test started"})
@@ -162,11 +180,11 @@ def run_connector():
 
 def _run_verify(code: str):
     from linkedin_session import LinkedInSession, random_delay
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         challenge_state = database.load_state("linkedin_challenge_state.json", default={})
         if not challenge_state.get("challenge_url"):
-            send_telegram("❌ No pending LinkedIn challenge found.")
+            send_telegram(block("VERIFY [err]", [("reason", "no pending challenge found")]))
             return
 
         # Start fresh session with saved cookies
@@ -198,12 +216,18 @@ def _run_verify(code: str):
 
             if "feed" in page.url or "mynetwork" in page.url:
                 database.save_state("linkedin_challenge_state.json", {})
-                send_telegram(f"✅ LinkedIn verification successful! Logged in at {page.url}")
+                send_telegram(block("VERIFY", [
+                    ("status",  "OK  session active"),
+                    ("url",     page.url[:60]),
+                ]))
             else:
-                send_telegram(f"⚠️ Verification attempt result: {page.url}. Code may be wrong or expired.")
+                send_telegram(block("VERIFY [warn]", [
+                    ("status",  "code may be wrong or expired"),
+                    ("url",     page.url[:60]),
+                ]))
             page.close()
     except Exception as e:
-        send_telegram(f"❌ LinkedIn verify error: {e}")
+        send_telegram(block("VERIFY [err]", [("reason", str(e)[:80])]))
         print(f"[verify] error: {e}", flush=True)
 
 
@@ -300,17 +324,20 @@ def _run_easy_apply():
     from linkedin_session import LinkedInSession
     from easy_apply_service import run_easy_apply_batch
     from application_tracker import get_applications
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             jobs = get_applications(status_filter="seen")
             result = run_easy_apply_batch(session, jobs)
-        send_telegram(f"📝 Easy Apply: {result['applied']} submitted, {result['skipped']} skipped")
+        send_telegram(block("EASY APPLY", [
+            ("submitted", result['applied']),
+            ("skipped",   result['skipped']),
+        ]))
     except Exception as e:
         print(f"[easy_apply] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Easy Apply failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("EASY APPLY [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -318,16 +345,19 @@ def _run_easy_apply():
 def _run_profile_views():
     from linkedin_session import LinkedInSession
     from profile_views_service import run_profile_views_connect
-    from telegram_service import send_telegram
+    from telegram_service import send_telegram, block
     try:
         with LinkedInSession() as session:
             result = run_profile_views_connect(session)
-        send_telegram(f"👀 Profile views: {result['sent']} connections sent ({result['checked']} checked)")
+        send_telegram(block("PROFILE VIEWS", [
+            ("checked",  result['checked']),
+            ("sent",     f"{result['sent']}  connection requests"),
+        ]))
     except Exception as e:
         print(f"[profile_views] error: {e}", flush=True)
         try:
-            from telegram_service import send_telegram
-            send_telegram(f"❌ Profile views connect failed: {e}")
+            from telegram_service import send_telegram, block
+            send_telegram(block("PROFILE VIEWS [err]", [("reason", str(e)[:80])]))
         except Exception:
             pass
 
@@ -707,3 +737,38 @@ def job_archive():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+
+@app.route("/internal/run-feed-scrape", methods=["POST"])
+def run_feed_scrape():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    def _task():
+        from feed_scraper_service import run_feed_scrape as _scrape
+        from linkedin_session import LinkedInSession
+        try:
+            with LinkedInSession() as session:
+                result = _scrape(session)
+            print(f"[feed_scraper] done: {result}", flush=True)
+        except Exception as e:
+            print(f"[feed_scraper] error: {e}", flush=True)
+    threading.Thread(target=_task, daemon=True).start()
+    return jsonify({"status": "ok", "message": "feed scrape started"})
+
+
+@app.route("/internal/posts", methods=["GET"])
+def get_posts():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    from feed_scraper_service import get_posts as _get_posts
+    import database as _db
+    limit = min(int(request.args.get("limit", 50)), 100)
+    posts = _get_posts(limit=limit)
+    state = _db.load_state("feed_posts.json", default={})
+    return jsonify({
+        "posts": posts,
+        "total": len(posts),
+        "last_scraped": state.get("last_scraped"),
+    })
