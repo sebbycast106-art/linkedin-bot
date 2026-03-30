@@ -13,9 +13,10 @@ import ai_service
 from linkedin_session import random_delay
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from warmup_service import apply_limit
 
 _STATE_FILE = "profile_views_state.json"
-_DAILY_LIMIT = 10
+_DAILY_LIMIT = apply_limit(10)
 _ANALYTICS_URL = "https://www.linkedin.com/analytics/profile-views/"
 
 _VIEWER_SELECTORS = [

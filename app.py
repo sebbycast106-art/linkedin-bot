@@ -818,5 +818,25 @@ def get_posts():
     })
 
 
+@app.route("/internal/warmup-reset", methods=["POST"])
+def warmup_reset():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    from warmup_service import reset_warmup
+    reset_warmup()
+    return jsonify({"status": "ok", "message": "warmup reset to today"})
+
+
+@app.route("/internal/warmup-skip", methods=["POST"])
+def warmup_skip():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    from warmup_service import skip_warmup
+    skip_warmup()
+    return jsonify({"status": "ok", "message": "warmup skipped — full speed"})
+
+
 if __name__ == "__main__":
     app.run(debug=False)

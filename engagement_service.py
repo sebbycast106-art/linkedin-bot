@@ -14,9 +14,10 @@ from zoneinfo import ZoneInfo
 from linkedin_session import LinkedInSession, random_delay
 import ai_service
 import database
+from warmup_service import apply_limit
 
 _STATE_FILE = "engagement_state.json"
-_DAILY_LIMITS = {"comments": 20, "likes": 50}
+_DAILY_LIMITS = {"comments": apply_limit(20), "likes": apply_limit(50)}
 _TARGET_HASHTAGS = [
     "fintech", "finance", "startups", "entrepreneurship",
     "venturecapital", "business", "northeastern",

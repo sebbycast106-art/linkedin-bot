@@ -27,9 +27,10 @@ import database
 import ai_service
 import config
 from telegram_service import send_telegram
+from warmup_service import apply_limit
 
 _STATE_FILE = "recruiter_state.json"
-_DAILY_LIMIT = 10
+_DAILY_LIMIT = apply_limit(10)
 _MAX_MESSAGED_IDS = 2000
 
 _FALLBACK_NOTE = (
