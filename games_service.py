@@ -93,11 +93,11 @@ def play_patches(page: Page) -> bool:
             print("[games/patches] no anchors found", flush=True)
             return False
 
-        # Convert idx to (row, col)
+        # Convert idx to (row, col) — 0-indexed to match solve_patches()
         parsed_anchors = []
         for a in anchors:
-            row = a['idx'] // cols + 1
-            col = a['idx'] % cols + 1
+            row = a['idx'] // cols
+            col = a['idx'] % cols
             parsed_anchors.append({
                 'row': row, 'col': col,
                 'color': a['color'], 'size': a['size']
@@ -120,11 +120,11 @@ def play_patches(page: Page) -> bool:
             anchor = next((a for a in parsed_anchors if a['color'] == color), None)
             if not anchor:
                 continue
-            anchor_idx = (anchor['row'] - 1) * cols + (anchor['col'] - 1)
+            anchor_idx = anchor['row'] * cols + anchor['col']
 
             # Click each non-anchor cell in this color group
             for (r, c) in cells:
-                cell_idx = (r - 1) * cols + (c - 1)
+                cell_idx = r * cols + c
                 if cell_idx == anchor_idx:
                     continue
                 el = page.query_selector(f'[data-cell-idx="{cell_idx}"]')
