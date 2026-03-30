@@ -36,10 +36,18 @@ def build_search_url(keywords: str, location: str) -> str:
 
 def format_job_message(job: dict) -> str:
     score_str = f" ⭐{job['score']}/10" if job.get("score") else ""
+    source = job.get("source", "linkedin")
+    source_badges = {
+        "linkedin": "🔵 LinkedIn",
+        "simplify": "🟣 Simplify",
+        "handshake": "🤝 Handshake",
+    }
+    source_str = source_badges.get(source, f"🔗 {source.title()}")
     return (
         f"💼 {job['title']}{score_str}\n"
         f"🏢 {job['company']}\n"
         f"📍 {job['location']}\n"
+        f"📌 {source_str}\n"
         f"🔗 {job['url']}"
     )
 
@@ -102,6 +110,7 @@ def scrape_new_jobs(session) -> list:
                 jobs = _parse_jobs_from_page(page)
                 for job in jobs:
                     if is_new_job(job["job_id"], seen_set):
+                        job.setdefault("source", "linkedin")
                         new_jobs.append(job)
                         seen_list.append(job["job_id"])
                         seen_set.add(job["job_id"])
@@ -111,7 +120,31 @@ def scrape_new_jobs(session) -> list:
     finally:
         page.close()
 
+    # Add Simplify.jobs results
+    try:
+        from simplify_scraper import scrape_simplify_jobs
+        simplify_jobs = scrape_simplify_jobs(seen_set)
+        for job in simplify_jobs:
+            new_jobs.append(job)
+            seen_list.append(job["job_id"])
+            seen_set.add(job["job_id"])
+        print(f"[job_scraper] simplify: {len(simplify_jobs)} new listings", flush=True)
+    except Exception as e:
+        print(f"[job_scraper] simplify error: {e}", flush=True)
+
+    # Add Handshake results
+    try:
+        from handshake_scraper import scrape_handshake_jobs
+        handshake_jobs = scrape_handshake_jobs(seen_set)
+        for job in handshake_jobs:
+            new_jobs.append(job)
+            seen_list.append(job["job_id"])
+            seen_set.add(job["job_id"])
+        print(f"[job_scraper] handshake: {len(handshake_jobs)} new listings", flush=True)
+    except Exception as e:
+        print(f"[job_scraper] handshake error: {e}", flush=True)
+
     state["seen_ids"] = seen_list[-_MAX_SEEN:]
     database.save_state(_STATE_FILE, state)
-    print(f"[job_scraper] found {len(new_jobs)} new jobs", flush=True)
+    print(f"[job_scraper] found {len(new_jobs)} new jobs total", flush=True)
     return new_jobs
