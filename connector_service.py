@@ -18,7 +18,7 @@ import profile_scraper
 from warmup_service import apply_limit
 
 _STATE_FILE = "connector_state.json"
-_DAILY_CONNECT_LIMIT = apply_limit(20)
+_BASE_CONNECT_LIMIT = 20
 
 _SEARCH_QUERIES = [
     {"keywords": "finance Northeastern University", "network": "S,O"},
@@ -49,7 +49,7 @@ def _increment(state: dict) -> dict:
     today = _today()
     monday = _this_monday()
     if state.get("date") != today:
-        state = {"date": today, "connects_today": 0, "connected_ids": state.get("connected_ids", [])}
+        state = {**state, "date": today, "connects_today": 0, "connected_ids": state.get("connected_ids", [])}
     state["connects_today"] = state.get("connects_today", 0) + 1
     # Weekly tracking
     if state.get("week_start") != monday:
@@ -85,7 +85,7 @@ def run_daily_connections(session: LinkedInSession) -> int:
     profile_page = session.new_page()
     try:
         for query in _SEARCH_QUERIES:
-            if _get_daily_count(state) >= _DAILY_CONNECT_LIMIT:
+            if _get_daily_count(state) >= apply_limit(_BASE_CONNECT_LIMIT):
                 print("[connector] daily limit reached", flush=True)
                 break
 
@@ -96,7 +96,7 @@ def run_daily_connections(session: LinkedInSession) -> int:
 
                 results = page.query_selector_all(".reusable-search__result-container")[:8]
                 for result in results:
-                    if _get_daily_count(state) >= _DAILY_CONNECT_LIMIT:
+                    if _get_daily_count(state) >= apply_limit(_BASE_CONNECT_LIMIT):
                         break
                     try:
                         name_el = result.query_selector(".entity-result__title-text a span[aria-hidden='true']")

@@ -159,10 +159,9 @@ def run_inbox_check(session) -> dict:
                 )
                 send_telegram(alert)
 
-                # Also send draft reply for Telegram approval
-                reply_draft = generate_reply_draft(sender_name, message_text)
-                _save_draft(thread_id, reply_draft, sender_name)
-                draft_preview = reply_draft[:200] + ("..." if len(reply_draft) > 200 else "")
+                # Save the same draft reply for Telegram approval
+                _save_draft(thread_id, draft, sender_name)
+                draft_preview = (draft or "")[:200] + ("..." if draft and len(draft) > 200 else "")
                 send_telegram(
                     f"✉️ DRAFT REPLY — Review & Send\n"
                     f"FROM: {sender_name}\n"

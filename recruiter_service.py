@@ -30,7 +30,8 @@ from telegram_service import send_telegram
 from warmup_service import apply_limit
 
 _STATE_FILE = "recruiter_state.json"
-_DAILY_LIMIT = apply_limit(10)
+_BASE_DAILY_LIMIT = 10
+_MAX_PENDING_AGE = 30 * 86400  # 30 days in seconds
 _MAX_MESSAGED_IDS = 2000
 
 _FALLBACK_NOTE = (
@@ -77,7 +78,7 @@ def run_recruiter_outreach(session) -> dict:
     state = _load_state()
 
     # Check daily limit
-    if state.get("date") == _today() and state.get("sent_today", 0) >= _DAILY_LIMIT:
+    if state.get("date") == _today() and state.get("sent_today", 0) >= apply_limit(_BASE_DAILY_LIMIT):
         print("[recruiter] daily limit already reached", flush=True)
         return {"sent": 0}
 
@@ -93,7 +94,7 @@ def run_recruiter_outreach(session) -> dict:
     page = session.new_page()
     try:
         for query in _TARGET_SEARCHES:
-            if state.get("sent_today", 0) >= _DAILY_LIMIT:
+            if state.get("sent_today", 0) >= apply_limit(_BASE_DAILY_LIMIT):
                 print("[recruiter] daily limit reached", flush=True)
                 break
 
@@ -107,7 +108,7 @@ def run_recruiter_outreach(session) -> dict:
 
                 results = page.query_selector_all(".reusable-search__result-container")[:5]
                 for result in results:
-                    if state.get("sent_today", 0) >= _DAILY_LIMIT:
+                    if state.get("sent_today", 0) >= apply_limit(_BASE_DAILY_LIMIT):
                         break
                     try:
                         name_el = result.query_selector(
@@ -206,8 +207,12 @@ def run_followup_check(session) -> dict:
     page = session.new_page()
     try:
         for entry in pending:
-            if now - entry.get("sent_at", 0) < 86400:
+            age = now - entry.get("sent_at", 0)
+            if age < 86400:
                 still_pending.append(entry)
+                continue
+            # Drop entries older than _MAX_PENDING_AGE to prevent unbounded growth
+            if age > _MAX_PENDING_AGE:
                 continue
 
             profile_id = entry["profile_id"]

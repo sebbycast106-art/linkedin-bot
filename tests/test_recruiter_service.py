@@ -47,7 +47,8 @@ def test_daily_limit_respected(tmp_path, monkeypatch):
 
     with patch("recruiter_service.database.load_state", return_value=state), \
          patch("recruiter_service.database.save_state") as mock_save, \
-         patch("recruiter_service.send_telegram"):
+         patch("recruiter_service.send_telegram"), \
+         patch("recruiter_service.apply_limit", return_value=10):
 
         mock_session = MagicMock()
         result = recruiter_service.run_recruiter_outreach(mock_session)

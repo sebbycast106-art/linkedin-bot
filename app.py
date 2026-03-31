@@ -808,7 +808,10 @@ def get_posts():
         return "Forbidden", 403
     from feed_scraper_service import get_posts as _get_posts
     import database as _db
-    limit = min(int(request.args.get("limit", 50)), 100)
+    try:
+        limit = min(int(request.args.get("limit", 50)), 100)
+    except (ValueError, TypeError):
+        limit = 50
     posts = _get_posts(limit=limit)
     state = _db.load_state("feed_posts.json", default={})
     return jsonify({
