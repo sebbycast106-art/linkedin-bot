@@ -35,6 +35,28 @@ _MESSAGES_DAILY_LIMIT   = 20
 _ALUMNI_STATE = "alumni_connector_state.json"
 
 _FOLLOWUP_DAYS = 5
+_GHOST_DAYS = 14
+
+
+def _count_ghosts(applications: list) -> int:
+    """Count apps with status 'applied' and applied_at older than _GHOST_DAYS days."""
+    now = datetime.now(timezone.utc)
+    count = 0
+    for app in applications:
+        if app.get("status") != "applied":
+            continue
+        applied_at_str = app.get("applied_at", "")
+        if not applied_at_str:
+            continue
+        try:
+            applied_at = datetime.fromisoformat(applied_at_str)
+            if applied_at.tzinfo is None:
+                applied_at = applied_at.replace(tzinfo=timezone.utc)
+            if (now - applied_at).days >= _GHOST_DAYS:
+                count += 1
+        except (ValueError, TypeError):
+            pass
+    return count
 
 
 def get_status() -> dict:
@@ -119,8 +141,12 @@ def get_status() -> dict:
         else:
             risk_level = "safe"
 
+        from connector_service import get_response_rate
+        response_rate = get_response_rate()
+
         return {
             "today": today,
+            "response_rate": response_rate,
             "connections": {
                 "total_all_time": len(connector.get("connected_ids", [])),
                 "sent_today": connector.get("connects_today", 0) if connector.get("date") == today else 0,
@@ -204,6 +230,7 @@ def get_status() -> dict:
                     "today_limit": _LIKES_LIMIT,
                 },
                 "risk_level": risk_level,
+                "ghost_count": _count_ghosts(applications),
             },
             "warmup": get_warmup_info(),
         }

@@ -838,5 +838,29 @@ def warmup_skip():
     return jsonify({"status": "ok", "message": "warmup skipped — full speed"})
 
 
+@app.route("/internal/run-ghost-detector", methods=["POST"])
+def run_ghost_detector_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    def task():
+        from ghost_detector_service import run_ghost_detector
+        run_ghost_detector()
+    threading.Thread(target=task, daemon=True).start()
+    return jsonify({"status": "started"})
+
+
+@app.route("/internal/run-daily-brief", methods=["POST"])
+def run_daily_brief_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    def task():
+        from daily_brief_service import run_daily_brief
+        run_daily_brief()
+    threading.Thread(target=task, daemon=True).start()
+    return jsonify({"status": "started"})
+
+
 if __name__ == "__main__":
     app.run(debug=False)
