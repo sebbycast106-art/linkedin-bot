@@ -41,22 +41,13 @@ def try_easy_apply(page, job_url: str) -> bool:
         except Exception:
             pass
 
-        # Page is already on job_url (navigated above). Extract description without re-navigating.
-        description = ""
-        for sel in (
-            ".jobs-description__content",
-            ".job-details-module__content",
-            ".jobs-box__html-content",
-        ):
-            el = page.query_selector(sel)
-            if el:
-                description = el.inner_text()[:2000]
-                break
-        if description:
-            desc_score = job_scorer.score_job_description(title_from_page, company_from_page, description)
-            if desc_score < 7:
-                print(f"[easy_apply] {job_url[:60]}: description score {desc_score}/10 — skipping", flush=True)
-                return False
+        # Score full job description — use scrape_job_description so page navigation
+        # is handled consistently and the call is mockable in tests.
+        description = job_scorer.scrape_job_description(page, job_url)
+        desc_score = job_scorer.score_job_description(title_from_page, company_from_page, description)
+        if desc_score < 7:
+            print(f"[easy_apply] {job_url[:60]}: description score {desc_score}/10 — skipping", flush=True)
+            return False
 
         # Look for Easy Apply button
         easy_apply_btn = page.query_selector("button[aria-label*='Easy Apply']")

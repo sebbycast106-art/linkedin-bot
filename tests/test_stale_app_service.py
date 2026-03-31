@@ -101,14 +101,15 @@ def test_fresh_apps_not_stale(fresh_apps):
     mock_tg.assert_not_called()
 
 
-def test_no_followup_not_stale(no_followup_apps):
+def test_no_followup_is_stale(no_followup_apps):
+    """Apps older than 21 days are stale regardless of follow_up_sent value."""
     with patch("stale_app_service.application_tracker") as mock_tracker, \
          patch("stale_app_service.send_telegram") as mock_tg:
         mock_tracker.get_applications.return_value = no_followup_apps
         from stale_app_service import run_stale_check
         result = run_stale_check()
-    assert result["stale_count"] == 0
-    assert result["notified"] is False
+    assert result["stale_count"] == 1
+    assert result["notified"] is True
 
 
 def test_custom_stale_days(stale_apps):

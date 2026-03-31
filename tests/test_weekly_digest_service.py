@@ -22,7 +22,7 @@ def test_digest_runs_with_empty_state():
     with patch("weekly_digest_service.send_telegram"):
         result = weekly_digest_service.run_weekly_digest()
     assert isinstance(result, str)
-    assert "Weekly" in result
+    assert "WEEKLY" in result
 
 
 # ---------------------------------------------------------------------------

@@ -51,7 +51,9 @@ def test_try_easy_apply_complex_form_skipped():
     # Return 3 form sections — triggers complex form path
     page.query_selector_all.return_value = [MagicMock(), MagicMock(), MagicMock()]
 
-    with patch("easy_apply_service.random_delay"):
+    with patch("easy_apply_service.random_delay"), \
+         patch("easy_apply_service.job_scorer.scrape_job_description", return_value="desc"), \
+         patch("easy_apply_service.job_scorer.score_job_description", return_value=8):
         result = easy_apply_service.try_easy_apply(page, "https://www.linkedin.com/jobs/view/456/")
 
     assert result is False
@@ -103,6 +105,8 @@ def test_try_easy_apply_fills_cover_letter():
     page.url = "https://www.linkedin.com/jobs/view/111/"
 
     with patch("easy_apply_service.random_delay"), \
+         patch("easy_apply_service.job_scorer.scrape_job_description", return_value="desc"), \
+         patch("easy_apply_service.job_scorer.score_job_description", return_value=8), \
          patch("ai_service.generate_cover_letter", return_value="I am excited to apply.") as mock_gcl:
         result = easy_apply_service.try_easy_apply(page, "https://www.linkedin.com/jobs/view/111/")
 
@@ -147,7 +151,9 @@ def test_try_easy_apply_success():
     page.query_selector_all.return_value = [MagicMock()]
     page.url = "https://www.linkedin.com/jobs/view/789/"
 
-    with patch("easy_apply_service.random_delay"):
+    with patch("easy_apply_service.random_delay"), \
+         patch("easy_apply_service.job_scorer.scrape_job_description", return_value="desc"), \
+         patch("easy_apply_service.job_scorer.score_job_description", return_value=8):
         result = easy_apply_service.try_easy_apply(page, "https://www.linkedin.com/jobs/view/789/")
 
     assert result is True
