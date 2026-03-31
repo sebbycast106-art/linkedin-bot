@@ -56,6 +56,14 @@ def _increment(state: dict) -> dict:
         state["sent_this_week"] = 0
         state["week_start"] = monday
     state["sent_this_week"] = state.get("sent_this_week", 0) + 1
+    # Response rate tracking
+    state["total_sent"] = state.get("total_sent", 0) + 1
+    daily_stats = state.get("daily_stats", [])
+    if daily_stats and daily_stats[-1].get("date") == today:
+        daily_stats[-1]["sent"] = daily_stats[-1].get("sent", 0) + 1
+    else:
+        daily_stats.append({"date": today, "sent": 1, "accepted": 0})
+    state["daily_stats"] = daily_stats[-90:]  # keep last 90 days
     return state
 
 
@@ -158,3 +166,17 @@ def run_daily_connections(session: LinkedInSession) -> int:
 
     print(f"[connector] sent {total_sent} requests", flush=True)
     return total_sent
+
+
+def get_response_rate() -> dict:
+    """Return connection request acceptance rate stats."""
+    state = database.load_state(_STATE_FILE, {})
+    total_sent = state.get("total_sent", 0)
+    total_accepted = state.get("total_accepted", 0)
+    rate = round(total_accepted / total_sent * 100, 1) if total_sent > 0 else 0.0
+    return {
+        "total_sent": total_sent,
+        "total_accepted": total_accepted,
+        "accept_rate_pct": rate,
+        "daily_stats": state.get("daily_stats", [])[-30:],  # last 30 days
+    }

@@ -118,7 +118,7 @@ def test_non_recruiter_message_not_notified():
 # ---------------------------------------------------------------------------
 
 def test_recruiter_message_triggers_telegram():
-    """Message containing a recruiter keyword should send a Telegram alert with '📩'."""
+    """Message containing a recruiter keyword should send Telegram alerts including '📩'."""
     thread, sender_name, sender_title, msg_text = _make_thread(
         "t3", message_text="We have a great opportunity for you"
     )
@@ -135,14 +135,20 @@ def test_recruiter_message_triggers_telegram():
          patch("inbox_monitor_service.random_delay"), \
          patch("inbox_monitor_service.send_telegram") as mock_tg, \
          patch("inbox_monitor_service.ai_service.generate_inbox_reply",
-               return_value="draft reply"):
+               return_value="draft reply"), \
+         patch("inbox_monitor_service.generate_reply_draft",
+               return_value="Here's my draft reply."):
 
         result = inbox_monitor_service.run_inbox_check(session)
 
     assert result["notified"] == 1
-    mock_tg.assert_called_once()
-    alert_text = mock_tg.call_args[0][0]
-    assert "📩" in alert_text
+    # Now sends two messages: the alert and the draft approval prompt
+    assert mock_tg.call_count == 2
+    first_alert = mock_tg.call_args_list[0][0][0]
+    assert "📩" in first_alert
+    second_msg = mock_tg.call_args_list[1][0][0]
+    assert "SEND_t3" in second_msg
+    assert "SKIP_t3" in second_msg
 
 
 # ---------------------------------------------------------------------------

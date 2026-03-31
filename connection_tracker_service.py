@@ -117,6 +117,25 @@ def run_acceptance_check(session) -> dict:
                         record_signal(profile_id, entry.get("name", ""), "connection_accepted")
                     except Exception:
                         pass
+                    # Update response rate stats in connector_state.json
+                    try:
+                        connector_state = database.load_state("connector_state.json", {})
+                        connector_state["total_accepted"] = connector_state.get("total_accepted", 0) + 1
+                        # Update matching daily_stats entry for the day the request was sent
+                        sent_date = None
+                        if entry.get("sent_at"):
+                            from datetime import date
+                            import time as _time
+                            sent_date = date.fromtimestamp(entry["sent_at"]).isoformat()
+                        daily_stats = connector_state.get("daily_stats", [])
+                        for day in daily_stats:
+                            if sent_date and day.get("date") == sent_date:
+                                day["accepted"] = day.get("accepted", 0) + 1
+                                break
+                        connector_state["daily_stats"] = daily_stats
+                        database.save_state("connector_state.json", connector_state)
+                    except Exception as e:
+                        print(f"[connection_tracker] response rate update error: {e}", flush=True)
                     print(
                         f"[connection_tracker] accepted: {entry.get('name', profile_id)}",
                         flush=True,

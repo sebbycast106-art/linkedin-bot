@@ -6,14 +6,56 @@ State file: inbox_state.json — tracks seen thread IDs to avoid duplicate alert
 
 Public interface:
     run_inbox_check(session) -> dict  # {"found": N, "notified": N}
+    generate_reply_draft(recruiter_name, their_message, job_title) -> str
 """
 import database
 import ai_service
+import anthropic
+import config
 from linkedin_session import random_delay
 from telegram_service import send_telegram
 
 _STATE_FILE = "inbox_state.json"
+_DRAFT_STATE_FILE = "message_queue_state.json"
 _DEFAULT_STATE = {"seen_thread_ids": []}
+
+
+def generate_reply_draft(recruiter_name: str, their_message: str, job_title: str = "") -> str:
+    """Generate a brief professional reply to a LinkedIn recruiter message."""
+    try:
+        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY())
+        prompt = (
+            f"Write a brief, professional reply to a LinkedIn recruiter message.\n"
+            f"Recruiter: {recruiter_name}\n"
+            f"Their message: {their_message}\n"
+            f"Context: Co-op/internship candidate at Northeastern University, finance/fintech focus.\n"
+            f"Keep it under 100 words. Be enthusiastic but professional. Ask for a call."
+        )
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=150,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"[inbox_monitor] generate_reply_draft error: {e}", flush=True)
+        return f"Hi {recruiter_name}, thanks for reaching out! I'm very interested in learning more. Could we schedule a quick call?"
+
+
+def _save_draft(thread_id: str, draft_text: str, recruiter_name: str) -> None:
+    """Save a pending draft reply to message_queue_state.json."""
+    queue_state = database.load_state(_DRAFT_STATE_FILE, {"queue": []})
+    queue = queue_state.get("queue", [])
+    # Remove any existing draft for the same thread
+    queue = [e for e in queue if e.get("thread_id") != thread_id]
+    queue.append({
+        "thread_id": thread_id,
+        "draft": draft_text,
+        "recruiter_name": recruiter_name,
+        "status": "pending_approval",
+    })
+    queue_state["queue"] = queue
+    database.save_state(_DRAFT_STATE_FILE, queue_state)
 
 _RECRUITER_KEYWORDS = [
     "opportunity", "role", "position", "opening", "reach out",
@@ -116,6 +158,18 @@ def run_inbox_check(session) -> dict:
                     f'💬 Draft reply:\n"{draft}"'
                 )
                 send_telegram(alert)
+
+                # Also send draft reply for Telegram approval
+                reply_draft = generate_reply_draft(sender_name, message_text)
+                _save_draft(thread_id, reply_draft, sender_name)
+                draft_preview = reply_draft[:200] + ("..." if len(reply_draft) > 200 else "")
+                send_telegram(
+                    f"✉️ DRAFT REPLY — Review & Send\n"
+                    f"FROM: {sender_name}\n"
+                    f"DRAFT REPLY: {draft_preview}\n\n"
+                    f"Reply SEND_{thread_id} to send, or SKIP_{thread_id} to dismiss"
+                )
+
                 notified += 1
 
             seen_thread_ids.append(thread_id)

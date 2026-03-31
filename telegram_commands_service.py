@@ -44,6 +44,7 @@ Available commands:
 /analytics — Show network and application analytics
 /skills — Show skill profile. /skills add [skill] or /skills remove [skill]
 /warm — Show top 10 warmest connections
+/jobs — Show today's top 5 highest-scored jobs
 /help — Show this help message\
 """
 
@@ -56,7 +57,19 @@ def _make_job_id(company: str) -> str:
 
 def handle_telegram_command(text: str):
     """Parse a Telegram message and return a reply string, or None if unrecognized."""
-    if not text or not text.startswith("/"):
+    if not text:
+        return None
+
+    # Handle SEND_<thread_id> and SKIP_<thread_id> (no leading slash)
+    stripped = text.strip()
+    if stripped.upper().startswith("SEND_"):
+        thread_id = stripped[5:].strip()
+        return _handle_send_draft(thread_id)
+    if stripped.upper().startswith("SKIP_"):
+        thread_id = stripped[5:].strip()
+        return _handle_skip_draft(thread_id)
+
+    if not text.startswith("/"):
         return None
 
     parts = text.strip().split(None, 1)
@@ -101,6 +114,9 @@ def handle_telegram_command(text: str):
 
     if command == "/warm":
         return _handle_warm()
+
+    if command == "/jobs":
+        return _handle_jobs()
 
     if command == "/trigger":
         return _handle_trigger(args)
@@ -299,3 +315,61 @@ def _handle_trigger(args: str) -> str:
             return f"Failed to trigger '{service}': HTTP {resp.status_code}"
     except requests.RequestException as exc:
         return f"Failed to trigger '{service}': {exc}"
+
+
+def _handle_jobs() -> str:
+    """Show today's top 5 highest-scored jobs."""
+    import database as _db
+    apps = _db.load_state("application_tracker_state.json", {}).get("applications", [])
+
+    scored = [a for a in apps if a.get("score") and a.get("status") == "seen"]
+    scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+    top5 = scored[:5]
+
+    if not top5:
+        # Fall back to most recent seen jobs
+        seen = [a for a in apps if a.get("status") == "seen"]
+        seen.sort(key=lambda x: x.get("applied_at", ""), reverse=True)
+        top5 = seen[:5]
+
+    if not top5:
+        return "📋 JOBS\nSTATUS: No jobs found — run Job Scraper first"
+
+    lines = ["📋 TOP JOBS"]
+    for i, job in enumerate(top5, 1):
+        score_str = f" [{job['score']}/10]" if job.get("score") else ""
+        lines.append(f"#{i} {job.get('company', '?')}: {job.get('title', '?')}{score_str}")
+
+    total_seen = len([a for a in apps if a.get("status") == "seen"])
+    total_applied = len([a for a in apps if a.get("status") == "applied"])
+    lines.append(f"TOTAL SEEN: {total_seen}")
+    lines.append(f"APPLIED: {total_applied}")
+    return "\n".join(lines)
+
+
+def _handle_send_draft(thread_id: str) -> str:
+    """Approve and queue a pending draft reply."""
+    import database as _db
+    queue_state = _db.load_state("message_queue_state.json", {"queue": []})
+    queue = queue_state.get("queue", [])
+    match = next((e for e in queue if e.get("thread_id") == thread_id), None)
+    if not match:
+        return f"No pending draft found for thread {thread_id}."
+    # Mark as approved (actual LinkedIn send is complex — save for processing)
+    match["status"] = "approved"
+    queue_state["queue"] = queue
+    _db.save_state("message_queue_state.json", queue_state)
+    return f"Draft reply for thread {thread_id} approved and queued for sending."
+
+
+def _handle_skip_draft(thread_id: str) -> str:
+    """Dismiss a pending draft reply."""
+    import database as _db
+    queue_state = _db.load_state("message_queue_state.json", {"queue": []})
+    queue = queue_state.get("queue", [])
+    new_queue = [e for e in queue if e.get("thread_id") != thread_id]
+    if len(new_queue) == len(queue):
+        return f"No pending draft found for thread {thread_id}."
+    queue_state["queue"] = new_queue
+    _db.save_state("message_queue_state.json", queue_state)
+    return f"Dismissed draft reply for thread {thread_id}."
