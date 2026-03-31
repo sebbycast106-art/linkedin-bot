@@ -179,3 +179,52 @@ def test_run_skill_match_returns_ok(client):
     assert res.status_code == 200
     assert res.json["status"] == "ok"
     assert "profile" in res.json
+
+
+# ── NUWorks endpoints ─────────────────────────────────────────────────────────
+
+def test_run_neworks_scraper_rejects_bad_secret(client):
+    res = client.post("/internal/run-neworks-scraper?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_run_neworks_scraper_returns_ok(client):
+    with patch("app.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = MagicMock()
+        res = client.post("/internal/run-neworks-scraper?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"
+
+
+def test_neworks_login_rejects_bad_secret(client):
+    res = client.post("/internal/neworks-login?secret=wrong")
+    assert res.status_code == 403
+
+
+def test_neworks_login_returns_ok(client):
+    with patch("app.threading.Thread") as mock_thread:
+        mock_thread.return_value.start = MagicMock()
+        res = client.post("/internal/neworks-login?secret=test-secret")
+    assert res.status_code == 200
+    assert res.json["status"] == "ok"
+
+
+def test_job_description_rejects_bad_secret(client):
+    res = client.get("/internal/job-description?secret=wrong&job_id=test123")
+    assert res.status_code == 403
+
+
+def test_job_description_requires_job_id(client):
+    res = client.get("/internal/job-description?secret=test-secret")
+    assert res.status_code == 400
+    assert "job_id" in res.json.get("error", "")
+
+
+def test_job_description_returns_partial_when_not_found(client):
+    with patch("job_archive_service.get_archived_description", return_value=None), \
+         patch("application_tracker.get_applications", return_value=[]):
+        res = client.get("/internal/job-description?secret=test-secret&job_id=notexist")
+    assert res.status_code == 200
+    data = res.json
+    assert data["job_id"] == "notexist"
+    assert data["description"] is None

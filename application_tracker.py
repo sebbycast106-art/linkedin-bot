@@ -17,7 +17,15 @@ def _save(state: dict):
     database.save_state(_STATE_FILE, state)
 
 
-def add_application(job_id: str, company: str, title: str, url: str = "", status: str = "applied") -> str:
+def add_application(
+    job_id: str,
+    company: str,
+    title: str,
+    url: str = "",
+    status: str = "applied",
+    source: str = "linkedin",
+    score: int = None,
+) -> str:
     """Record a job application. Returns confirmation message."""
     state = _load()
     apps = state.get("applications", [])
@@ -26,7 +34,7 @@ def add_application(job_id: str, company: str, title: str, url: str = "", status
     if any(a["job_id"] == job_id for a in apps):
         return f"Already tracking application to {company} — {title}"
 
-    apps.append({
+    entry = {
         "job_id": job_id,
         "company": company,
         "title": title,
@@ -34,7 +42,11 @@ def add_application(job_id: str, company: str, title: str, url: str = "", status
         "applied_at": datetime.now(timezone.utc).isoformat(),
         "status": status,  # applied | responded | interview | offer | rejected | seen
         "follow_up_sent": False,
-    })
+        "source": source,
+    }
+    if score is not None:
+        entry["score"] = score
+    apps.append(entry)
     # Cap at 200
     state["applications"] = apps[-200:]
     _save(state)

@@ -865,5 +865,130 @@ def run_daily_brief_endpoint():
     return jsonify({"status": "started"})
 
 
+@app.route("/internal/job-description", methods=["GET"])
+def job_description_endpoint():
+    """Return job description text for a given job_id (synchronous — caller awaits).
+
+    1. Check job_archive_state.json for cached description
+    2. Fallback: look up URL from application_tracker_state.json
+    3. Fallback: live Playwright scrape of job URL
+    4. Partial fallback: return title + company with null description
+    Returns: {job_id, title, company, description: str|null}
+    """
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    job_id = request.args.get("job_id", "").strip()
+    if not job_id:
+        return jsonify({"error": "job_id required"}), 400
+
+    from job_archive_service import get_archived_description
+
+    # 1. Check archive first (fastest path)
+    description = get_archived_description(job_id)
+
+    # 2. Look up metadata from tracker
+    apps = get_applications()
+    job_data = next((a for a in apps if a.get("job_id") == job_id), None)
+    title = job_data.get("title", "") if job_data else ""
+    company = job_data.get("company", "") if job_data else ""
+    url = job_data.get("url", "") if job_data else ""
+
+    # 3. Live scrape if no cached description and URL available
+    if not description and url:
+        try:
+            from playwright.sync_api import sync_playwright
+            import time
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--single-process"],
+                )
+                page = browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    )
+                )
+                page.goto(url, timeout=20000)
+                time.sleep(2)
+                for sel in [
+                    ".jobs-description__content",
+                    ".job-details-module__content",
+                    "[class*='job-description']",
+                    "article",
+                    "main",
+                ]:
+                    el = page.query_selector(sel)
+                    if el:
+                        description = (el.inner_text() or "")[:3000]
+                        if description.strip():
+                            break
+                browser.close()
+        except Exception as e:
+            print(f"[job_description] scrape failed for {job_id}: {e}", flush=True)
+
+    return jsonify({
+        "job_id": job_id,
+        "title": title,
+        "company": company,
+        "description": description or None,
+    })
+
+
+# ── NUWorks ──────────────────────────────────────────────────────────────────
+
+def _run_neworks_scraper_task():
+    from neworks_scraper import run_neworks_scraper
+    from telegram_service import send_telegram, block
+    try:
+        result = run_neworks_scraper()
+        if result.get("status") not in ("ok", "duo_required"):
+            send_telegram(block("NEWORKS [err]", [("reason", result.get("error", "unknown")[:80])]))
+        print(f"[neworks] done: {result}", flush=True)
+    except Exception as e:
+        print(f"[neworks] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram, block
+            send_telegram(block("NEWORKS [err]", [("reason", str(e)[:80])]))
+        except Exception:
+            pass
+
+
+def _run_neworks_login_task():
+    from neworks_scraper import run_neworks_login
+    from telegram_service import send_telegram, block
+    try:
+        result = run_neworks_login()
+        send_telegram(block("NEWORKS LOGIN", [("status", result.get("status", "unknown"))]))
+        print(f"[neworks_login] done: {result}", flush=True)
+    except Exception as e:
+        print(f"[neworks_login] error: {e}", flush=True)
+        try:
+            from telegram_service import send_telegram, block
+            send_telegram(block("NEWORKS LOGIN [err]", [("reason", str(e)[:80])]))
+        except Exception:
+            pass
+
+
+@app.route("/internal/run-neworks-scraper", methods=["POST"])
+def run_neworks_scraper_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_neworks_scraper_task, daemon=True).start()
+    return jsonify({"status": "ok", "message": "neworks scraper started"})
+
+
+@app.route("/internal/neworks-login", methods=["POST"])
+def neworks_login_endpoint():
+    secret = request.args.get("secret", "")
+    if secret != config.SCHEDULER_SECRET():
+        return "Forbidden", 403
+    threading.Thread(target=_run_neworks_login_task, daemon=True).start()
+    return jsonify({"status": "ok", "message": "neworks login started"})
+
+
 if __name__ == "__main__":
     app.run(debug=False)

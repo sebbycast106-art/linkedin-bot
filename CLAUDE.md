@@ -14,6 +14,7 @@ A LinkedIn automation bot running on Railway (Flask + Playwright + Claude AI). I
 
 | Service | File | What it does |
 |---------|------|-------------|
+| NUWorks Scraper | `neworks_scraper.py` | Scrapes NEU co-op portal (jobs.northeastern.edu) via NEU SSO; Duo trusted-device cookie auth |
 | Job Scraper | `job_scraper.py` | Scrapes LinkedIn for new co-op/internship postings |
 | Job Scorer | `job_scorer.py` | Scores jobs 1-10 with Claude Haiku; filters below 6 |
 | Smart Apply Filter | `job_scorer.py` | Scores full job description (scrape + score) before Easy Apply; skips if <7 |
@@ -71,6 +72,8 @@ A LinkedIn automation bot running on Railway (Flask + Playwright + Claude AI). I
 | `job_archive_state.json` | `{archived[]}` — saved job descriptions |
 | `games_state.json` | `{<game_id>: {won_date}}` — daily games completion tracking |
 | `message_queue_state.json` | `{queue[]}` — scheduled message reminders |
+| `neworks_cookies.json` | Playwright cookie list for NEU SSO session (trusted-device) |
+| `neworks_state.json` | `{seen_ids[last 2000]}` — NUWorks job dedup |
 
 ## All Cron Jobs (cron-job.org)
 
@@ -91,6 +94,7 @@ API key: see cron-job.org dashboard (do not commit here)
 | 7429181 | LinkedIn Interview Prep | 3:00 PM ET daily |
 | 7429182 | LinkedIn Alumni Connector | 10:00 AM ET Mon/Wed/Fri |
 | 7432710 | LinkedIn Daily Games | 8:15 AM ET daily |
+| TBD | NUWorks Job Scraper | 8:30 AM ET daily (create on cron-job.org) |
 
 ## All Endpoints
 
@@ -118,6 +122,9 @@ API key: see cron-job.org dashboard (do not commit here)
 | POST | `/internal/track-application?secret=` | Manually track application |
 | GET | `/internal/applications?secret=` | List all applications |
 | POST | `/internal/check-follow-ups?secret=` | Check application follow-ups |
+| POST | `/internal/run-neworks-scraper?secret=` | Scrape NUWorks co-op listings |
+| POST | `/internal/neworks-login?secret=` | Force fresh NEU SSO login (clears cookies) |
+| GET | `/internal/job-description?job_id=&secret=` | Return job description text for gap analysis |
 
 ## Environment Variables (Railway)
 
@@ -130,6 +137,8 @@ API key: see cron-job.org dashboard (do not commit here)
 | `TELEGRAM_CHAT_ID` | Telegram user chat ID (set in Railway) |
 | `SCHEDULER_SECRET` | Auth for all internal endpoints (set in Railway) |
 | `DATA_DIR` | Volume mount path: `/data` |
+| `NORTHEASTERN_USERNAME` | NEU email for NUWorks SSO login |
+| `NORTHEASTERN_PASSWORD` | NEU password for NUWorks SSO login |
 
 ## Coding Patterns
 
@@ -144,7 +153,7 @@ API key: see cron-job.org dashboard (do not commit here)
 
 ```bash
 cd c:/Users/sebas/linkedin-bot
-python -m pytest tests/ -q          # run all (133 tests)
+python -m pytest tests/ -q          # run all (263 tests)
 python -m pytest tests/test_foo.py  # single file
 ```
 
